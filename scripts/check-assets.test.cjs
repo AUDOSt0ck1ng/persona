@@ -5,7 +5,11 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
-const { EXPECTED_ASSETS, validateAssets } = require("./check-assets.cjs");
+const {
+  EXPECTED_ASSET_ROLES,
+  EXPECTED_ASSETS,
+  validateAssets,
+} = require("./check-assets.cjs");
 
 function createFixture(context) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "persona-assets-"));
@@ -24,6 +28,19 @@ test("development accepts the complete local set or no media", (context) => {
   assert.deepEqual(validateAssets(), []);
   const fixture = createFixture(context);
   assert.deepEqual(validateAssets(fixture), []);
+});
+
+test("manifest assigns every stable asset its intended semantic role", () => {
+  const manifest = JSON.parse(
+    fs.readFileSync(
+      path.join(__dirname, "..", "public", "assets", "manifest.json"),
+      "utf8",
+    ),
+  );
+  assert.deepEqual(
+    Object.fromEntries(manifest.assets.map((asset) => [asset.path, asset.role])),
+    EXPECTED_ASSET_ROLES,
+  );
 });
 
 test("development rejects a partial local media set", (context) => {

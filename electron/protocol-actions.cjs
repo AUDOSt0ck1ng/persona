@@ -40,11 +40,18 @@ function parseProtocolUrl(rawUrl, protocolScheme = "persona") {
     if (action === "inactive" || action === "stop") {
       return [{ type: "event", event: voiceState("idle", "inactive") }];
     }
-    if (["idle", "greeting", "celebrate", "dance"].includes(action)) {
+    const animation = {
+      idle: "IDLE",
+      greeting: "GREETING",
+      happy: "HAPPY",
+      "finger-gun": "FINGER_GUN",
+      dance: "DANCE",
+    }[action];
+    if (animation) {
       return [
         {
           type: "event",
-          event: { type: "animation", animation: action.toUpperCase() },
+          event: { type: "animation", animation },
         },
       ];
     }

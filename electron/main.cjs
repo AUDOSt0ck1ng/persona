@@ -13,7 +13,10 @@ const {
   Tray,
 } = require("electron");
 const { createBridgeServer, DEFAULT_PORT } = require("./bridge-server.cjs");
-const { createPersonaMcpHandler } = require("./mcp-server.cjs");
+const {
+  createPersonaMcpHandler,
+  getAnimationEventName,
+} = require("./mcp-server.cjs");
 const {
   configureHyprlandWindow,
   getHyprlandWindowPlacement,
@@ -41,6 +44,7 @@ let hyprlandConfiguring = false;
 let hyprlandConfigurationTimer = null;
 let hyprlandLastPosition = null;
 let rendererLoadHookAttached = false;
+let mcpAnimationRequestId = 0;
 const pendingRendererEvents = new Map();
 
 app.setName("Persona");
@@ -334,8 +338,17 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.on("persona:hide", () => void hideOverlay());
 
     const mcpHandler = createPersonaMcpHandler({
-      onAnimation: (animation) =>
-        handleBridgeEvent({ type: "animation", animation: animation.toUpperCase() }),
+      onAnimation: (animation) => {
+        const eventName = getAnimationEventName(animation);
+        if (eventName == null) return;
+        mcpAnimationRequestId += 1;
+        handleBridgeEvent({
+          type: "animation",
+          animation: eventName,
+          source: "mcp",
+          requestId: mcpAnimationRequestId,
+        });
+      },
       onWindowAction: handleMcpWindowAction,
       getStatus: getMcpStatus,
     });

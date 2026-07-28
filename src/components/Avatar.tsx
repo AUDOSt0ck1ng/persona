@@ -9,17 +9,21 @@ import type { AnimationType } from '../animation-catalog';
 
 interface AvatarProps {
   animation: AnimationType;
+  animationRequest: number;
   audioLevel: number;
+  onAnimationComplete: () => void;
+  playback: 'loop' | 'once';
   speaking: boolean;
-  talkTurn: number;
   onReady?: (scene: THREE.Object3D) => void;
 }
 
 function AvatarModel({
   animation,
+  animationRequest,
   audioLevel,
+  onAnimationComplete,
+  playback,
   speaking,
-  talkTurn,
   onReady,
 }: AvatarProps) {
   const vrm = useVrmLoader('./assets/model.vrm');
@@ -27,11 +31,9 @@ function AvatarModel({
   const updateLipSync = useAmplitudeLipSync(vrm);
   const updateBlink = useBlink(vrm);
 
-  const animationRequest = animation === 'TALK' ? talkTurn : 0;
-
   useEffect(() => {
-    void play(animation);
-  }, [animation, animationRequest, play]);
+    void play(animation, { onComplete: onAnimationComplete, playback });
+  }, [animation, animationRequest, onAnimationComplete, play, playback]);
 
   useLayoutEffect(() => {
     if (vrm) onReady?.(vrm.scene);

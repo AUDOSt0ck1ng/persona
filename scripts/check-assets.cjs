@@ -13,11 +13,21 @@ const EXPECTED_ASSETS = [
   "animations/talk2.vrma",
   "animations/talk3.vrma",
   "animations/greeting.vrma",
-  "animations/celebrate1.vrma",
-  "animations/celebrate2.vrma",
-  "animations/dance1.vrma",
-  "animations/dance2.vrma",
+  "animations/happy.vrma",
+  "animations/finger-gun.vrma",
+  "animations/dance.vrma",
 ];
+const EXPECTED_ASSET_ROLES = {
+  "model.vrm": "model",
+  "animations/idle.vrma": "idle",
+  "animations/talk1.vrma": "talk",
+  "animations/talk2.vrma": "talk",
+  "animations/talk3.vrma": "talk",
+  "animations/greeting.vrma": "greeting",
+  "animations/happy.vrma": "happy",
+  "animations/finger-gun.vrma": "finger-gun",
+  "animations/dance.vrma": "dance",
+};
 
 function listRuntimeAssets(directory = ASSET_ROOT, prefix = "") {
   if (!fs.existsSync(directory)) return [];
@@ -51,6 +61,11 @@ function validateAssets({
   const mediaAbsent = actual.length === 0;
   if (JSON.stringify(manifestPaths) !== JSON.stringify(expected)) {
     errors.push("Asset manifest paths do not match Persona's stable asset contract.");
+  }
+  for (const asset of manifest.assets ?? []) {
+    if (EXPECTED_ASSET_ROLES[asset.path] !== asset.role) {
+      errors.push(`Incorrect asset role for ${asset.path ?? "unknown asset"}.`);
+    }
   }
   if ((!mediaAbsent || release) && JSON.stringify(actual) !== JSON.stringify(expected)) {
     errors.push("Runtime asset files do not match Persona's stable asset contract.");
@@ -103,6 +118,7 @@ if (require.main === module) {
 
 module.exports = {
   ASSET_ROOT,
+  EXPECTED_ASSET_ROLES,
   EXPECTED_ASSETS,
   listRuntimeAssets,
   validateAssets,

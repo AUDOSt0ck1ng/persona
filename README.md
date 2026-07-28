@@ -1,17 +1,25 @@
-# Persona
+<p align="center">
+  <img src="./public/assets/avatar.png" alt="Persona avatar" width="144" />
+</p>
 
-Persona brings an expressive character to realtime voice conversations.
+<h1 align="center">Persona</h1>
 
-It is a cross-platform desktop experience that gives voice interactions a
-recognizable visual identity alongside your work.
+<p align="center">
+  A realtime character presence for desktop voice experiences.
+</p>
+
+---
+
+Persona is a cross-platform desktop character that gives voice conversations
+an expressive visual identity alongside your work.
 
 ## Platform support
 
-| Platform | Automatic voice output listener | Distribution |
-| --- | --- | --- |
-| Linux | PipeWire process-stream capture | AppImage and DEB |
-| Windows | WASAPI process-loopback capture | NSIS installer |
-| macOS 14.2+ | Core Audio process tap | DMG and ZIP, arm64 and x64 |
+| Platform    | Automatic voice output listener | Distribution               |
+| ----------- | ------------------------------- | -------------------------- |
+| Linux       | PipeWire process-stream capture | AppImage and DEB           |
+| Windows     | WASAPI process-loopback capture | NSIS installer             |
+| macOS 14.2+ | Core Audio process tap          | DMG and ZIP, arm64 and x64 |
 
 Linux requires `pw-dump` and `pw-record` on `PATH`. Windows process-loopback
 requires Windows 10 build 20348 or newer. macOS asks once for System Audio
@@ -105,10 +113,9 @@ assets/
     ├── talk2.vrma
     ├── talk3.vrma
     ├── greeting.vrma
-    ├── celebrate1.vrma
-    ├── celebrate2.vrma
-    ├── dance1.vrma
-    └── dance2.vrma
+    ├── happy.vrma
+    ├── finger-gun.vrma
+    └── dance.vrma
 ```
 
 Replace files in place, then complete every license and source field in

@@ -16,6 +16,13 @@ test("maps window and animation URLs without accepting another scheme", () => {
   assert.deepEqual(parseProtocolUrl("persona://dance"), [
     { type: "event", event: { type: "animation", animation: "DANCE" } },
   ]);
+  assert.deepEqual(parseProtocolUrl("persona://finger-gun"), [
+    { type: "event", event: { type: "animation", animation: "FINGER_GUN" } },
+  ]);
+  assert.deepEqual(parseProtocolUrl("persona://happy"), [
+    { type: "event", event: { type: "animation", animation: "HAPPY" } },
+  ]);
+  assert.equal(parseProtocolUrl("persona://celebrate"), null);
   assert.equal(parseProtocolUrl("another-product://show"), null);
   assert.equal(parseProtocolUrl("not a URL"), null);
 });
