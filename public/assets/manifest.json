@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "distributionAllowed": false,
+  "notice": "Character media is intentionally not committed. Add redistributable files and complete all license metadata before publishing Persona.",
+  "assets": [
+    {
+      "path": "model.vrm",
+      "role": "model",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/idle.vrma",
+      "role": "idle",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/talk1.vrma",
+      "role": "talk",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/talk2.vrma",
+      "role": "talk",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/talk3.vrma",
+      "role": "talk",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/greeting.vrma",
+      "role": "greeting",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/celebrate1.vrma",
+      "role": "celebrate",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/celebrate2.vrma",
+      "role": "celebrate",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/dance1.vrma",
+      "role": "dance",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/dance2.vrma",
+      "role": "dance",
+      "license": null,
+      "source": null
+    }
+  ]
+}

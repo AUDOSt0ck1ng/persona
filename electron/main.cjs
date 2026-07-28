@@ -1,0 +1,395 @@
+"use strict";
+
+const path = require("node:path");
+const { pathToFileURL } = require("node:url");
+const {
+  app,
+  BrowserWindow,
+  globalShortcut,
+  ipcMain,
+  Menu,
+  nativeImage,
+  screen,
+  Tray,
+} = require("electron");
+const { createBridgeServer, DEFAULT_PORT } = require("./bridge-server.cjs");
+const {
+  configureHyprlandWindow,
+  getHyprlandWindowPlacement,
+} = require("./hyprland-window.cjs");
+const { createAudioListener } = require("./audio-listener.cjs");
+const { isAllowedRendererNavigation } = require("./navigation-policy.cjs");
+const { parseProtocolUrl, voiceState } = require("./protocol-actions.cjs");
+
+const WINDOW_WIDTH = 430;
+const WINDOW_HEIGHT = 680;
+const startInBackground = process.argv.includes("--background");
+const demoMode = process.argv.includes("--demo");
+const protocolScheme = "persona";
+const debugEnabled = process.env.PERSONA_DEBUG === "1";
+
+let avatarWindow = null;
+let bridge = null;
+let isQuitting = false;
+let latestEvent = null;
+let audioListener = null;
+let tray = null;
+let hyprlandConfigured = false;
+let hyprlandConfiguring = false;
+let hyprlandConfigurationTimer = null;
+let hyprlandLastPosition = null;
+let rendererLoadHookAttached = false;
+const pendingRendererEvents = new Map();
+
+app.setName("Persona");
+
+function debugLog(...values) {
+  if (debugEnabled) console.error("[persona]", ...values);
+}
+
+function positionWindow(window) {
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const bounds = window.getBounds();
+  const margin = 24;
+  window.setPosition(
+    Math.round(display.workArea.x + display.workArea.width - bounds.width - margin),
+    Math.round(display.workArea.y + display.workArea.height - bounds.height - margin),
+    false,
+  );
+}
+
+function scheduleHyprlandWindowConfiguration({
+  attempt = 0,
+  force = false,
+  position = null,
+  reposition = !hyprlandConfigured,
+} = {}) {
+  if (
+    (hyprlandConfigured && !force) ||
+    hyprlandConfiguring ||
+    !avatarWindow ||
+    avatarWindow.isDestroyed()
+  ) {
+    return;
+  }
+  clearTimeout(hyprlandConfigurationTimer);
+  const delays = [0, 80, 200, 500, 1000];
+  hyprlandConfigurationTimer = setTimeout(async () => {
+    hyprlandConfigurationTimer = null;
+    if (!avatarWindow || avatarWindow.isDestroyed()) return;
+    hyprlandConfiguring = true;
+    hyprlandConfigured = await configureHyprlandWindow({
+      pid: process.pid,
+      width: WINDOW_WIDTH,
+      height: WINDOW_HEIGHT,
+      onDebug: debugLog,
+      position,
+      reposition,
+    });
+    hyprlandConfiguring = false;
+    if (!hyprlandConfigured && attempt + 1 < delays.length) {
+      scheduleHyprlandWindowConfiguration({
+        attempt: attempt + 1,
+        force: true,
+        position,
+        reposition,
+      });
+    }
+  }, delays[attempt] ?? delays.at(-1));
+  hyprlandConfigurationTimer.unref?.();
+}
+
+function showOverlay({ focus = false } = {}) {
+  const window = createWindow();
+  if (window.isMinimized()) window.restore();
+  if (focus) {
+    if (!window.isVisible()) window.show();
+    window.focus();
+  } else if (!window.isVisible()) {
+    window.showInactive();
+  }
+  scheduleHyprlandWindowConfiguration();
+}
+
+async function hideOverlay() {
+  debugLog("hide overlay");
+  const placement = await getHyprlandWindowPlacement(process.pid);
+  if (placement) {
+    hyprlandLastPosition = { x: placement.x, y: placement.y };
+  }
+  avatarWindow?.hide();
+}
+
+function toggleOverlay() {
+  if (avatarWindow?.isVisible()) void hideOverlay();
+  else showOverlay({ focus: true });
+}
+
+function createWindow() {
+  if (avatarWindow && !avatarWindow.isDestroyed()) return avatarWindow;
+
+  avatarWindow = new BrowserWindow({
+    width: WINDOW_WIDTH,
+    height: WINDOW_HEIGHT,
+    minWidth: 320,
+    minHeight: 480,
+    show: false,
+    frame: false,
+    transparent: true,
+    backgroundColor: "#00000000",
+    hasShadow: false,
+    roundedCorners: false,
+    autoHideMenuBar: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    title: "Persona",
+    webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+
+  avatarWindow.setAlwaysOnTop(true, "floating");
+  avatarWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  avatarWindow.setOpacity(1);
+  avatarWindow.once("ready-to-show", () => {
+    positionWindow(avatarWindow);
+    scheduleHyprlandWindowConfiguration();
+  });
+  avatarWindow.on("show", () => {
+    avatarWindow.setAlwaysOnTop(true, "floating");
+    avatarWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    avatarWindow.setOpacity(1);
+    scheduleHyprlandWindowConfiguration({
+      force: true,
+      position: hyprlandLastPosition,
+      reposition: !hyprlandConfigured || hyprlandLastPosition != null,
+    });
+  });
+  avatarWindow.on("close", (event) => {
+    if (isQuitting) return;
+    event.preventDefault();
+    void hideOverlay();
+  });
+  avatarWindow.on("closed", () => {
+    clearTimeout(hyprlandConfigurationTimer);
+    hyprlandConfigurationTimer = null;
+    hyprlandConfigured = false;
+    hyprlandConfiguring = false;
+    rendererLoadHookAttached = false;
+    avatarWindow = null;
+  });
+
+  const rendererUrl =
+    process.env.VITE_DEV_SERVER_URL ||
+    pathToFileURL(path.join(__dirname, "..", "dist", "index.html")).href;
+  avatarWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  avatarWindow.webContents.on("will-navigate", (event, targetUrl) => {
+    if (!isAllowedRendererNavigation(targetUrl, rendererUrl)) event.preventDefault();
+  });
+  void avatarWindow.loadURL(rendererUrl);
+  return avatarWindow;
+}
+
+function flushPendingRendererEvents() {
+  rendererLoadHookAttached = false;
+  if (!avatarWindow || avatarWindow.isDestroyed() || avatarWindow.webContents.isLoading()) return;
+  for (const event of pendingRendererEvents.values()) {
+    avatarWindow.webContents.send("persona:event", event);
+  }
+  pendingRendererEvents.clear();
+}
+
+function ensureRendererLoadHook() {
+  if (
+    rendererLoadHookAttached ||
+    !avatarWindow ||
+    avatarWindow.isDestroyed() ||
+    !avatarWindow.webContents.isLoading()
+  ) {
+    return;
+  }
+  rendererLoadHookAttached = true;
+  avatarWindow.webContents.once("did-finish-load", flushPendingRendererEvents);
+}
+
+function emitToRenderer(event) {
+  latestEvent = event;
+  pendingRendererEvents.set(event.type, event);
+  if (!avatarWindow || avatarWindow.isDestroyed()) return;
+  if (avatarWindow.webContents.isLoading()) {
+    ensureRendererLoadHook();
+    return;
+  }
+  avatarWindow.webContents.send("persona:event", event);
+  pendingRendererEvents.delete(event.type);
+}
+
+function handleBridgeEvent(event) {
+  if (event.type !== "audio-level" || event.level > 0.025) debugLog("event", event);
+  if (event.type === "state") {
+    if (event.state.phase === "starting" || event.state.phase === "active") {
+      showOverlay();
+    }
+  } else if (event.type === "audio-level" && event.level > 0.025) {
+    showOverlay();
+  } else if (event.type === "animation") {
+    showOverlay();
+  }
+  emitToRenderer(event);
+}
+
+function handleProtocolUrl(rawUrl) {
+  const commands = parseProtocolUrl(rawUrl, protocolScheme);
+  if (!commands) return false;
+  for (const command of commands) {
+    if (command.type === "show") showOverlay({ focus: true });
+    else if (command.type === "hide") void hideOverlay();
+    else if (command.type === "toggle") toggleOverlay();
+    else if (command.type === "event") handleBridgeEvent(command.event);
+  }
+  return true;
+}
+
+function handleProtocolArgv(argv) {
+  const protocolUrl = argv.find((value) => value.startsWith(`${protocolScheme}://`));
+  if (protocolUrl) handleProtocolUrl(protocolUrl);
+}
+
+function createTray() {
+  const iconPath = path.join(__dirname, "..", "build", "icon.png");
+  const icon = nativeImage.createFromPath(iconPath).resize({ width: 20, height: 20 });
+  tray = new Tray(icon);
+  tray.setToolTip("Persona");
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: "Show Persona", click: () => showOverlay({ focus: true }) },
+      { label: "Hide Persona", click: () => void hideOverlay() },
+      { type: "separator" },
+      { label: "Preview listening", click: () => handleBridgeEvent(voiceState("listening")) },
+      { label: "Preview speaking", click: () => handleBridgeEvent(voiceState("speaking")) },
+      {
+        label: "Preview dance",
+        click: () => handleBridgeEvent({ type: "animation", animation: "DANCE" }),
+      },
+      { type: "separator" },
+      {
+        label: "Quit",
+        click: () => {
+          isQuitting = true;
+          app.quit();
+        },
+      },
+    ]),
+  );
+  tray.on("click", toggleOverlay);
+}
+
+function startDemo() {
+  handleBridgeEvent(voiceState("speaking"));
+  let phase = 0;
+  setInterval(() => {
+    phase += 0.21;
+    handleBridgeEvent({
+      type: "audio-level",
+      level: 0.1 + Math.abs(Math.sin(phase) * Math.sin(phase * 2.37)) * 0.34,
+    });
+  }, 40).unref?.();
+}
+
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on("second-instance", (_event, argv) => {
+    const handled = argv.some((value) => value.startsWith(`${protocolScheme}://`));
+    handleProtocolArgv(argv);
+    if (!handled && !argv.includes("--background")) showOverlay({ focus: true });
+  });
+
+  app.on("open-url", (event, url) => {
+    event.preventDefault();
+    handleProtocolUrl(url);
+  });
+
+  app.whenReady().then(async () => {
+    app.setAppUserModelId("com.xikhar.persona");
+    app.dock?.hide();
+    if (app.isPackaged) app.setAsDefaultProtocolClient(protocolScheme);
+
+    ipcMain.handle("persona:get-snapshot", () => latestEvent);
+    ipcMain.on("persona:hide", () => void hideOverlay());
+
+    bridge = createBridgeServer({
+      port: Number(process.env.PERSONA_BRIDGE_PORT || DEFAULT_PORT),
+      onEvent: handleBridgeEvent,
+    });
+    try {
+      await bridge.listen();
+    } catch (error) {
+      console.error(
+        "[persona] local integration server unavailable:",
+        error instanceof Error ? error.message : String(error),
+      );
+      bridge = null;
+    }
+
+    createTray();
+    globalShortcut.register("CommandOrControl+Shift+A", toggleOverlay);
+    handleProtocolArgv(process.argv);
+
+    if (!demoMode) {
+      audioListener = createAudioListener({
+        isPackaged: app.isPackaged,
+        resourcesPath: process.resourcesPath,
+        onActivity: (activity) => {
+          debugLog("listener activity", activity);
+          handleBridgeEvent(voiceState(activity));
+        },
+        onDebug: debugEnabled ? (nodes) => debugLog("listener output nodes", nodes) : null,
+        onLevel: (level) => handleBridgeEvent({ type: "audio-level", level }),
+        onSession: (active) => {
+          debugLog("listener session", active);
+          handleBridgeEvent(voiceState(active ? "listening" : "idle", active ? "active" : "inactive"));
+        },
+        onStatus: (status) => {
+          debugLog("listener status", status);
+          emitToRenderer({ type: "listener-status", status });
+        },
+      });
+      if (audioListener) void audioListener.start();
+    }
+    if (!audioListener && !demoMode) {
+      emitToRenderer({
+        type: "listener-status",
+        status: {
+          available: false,
+          capturing: false,
+          monitoring: false,
+          source: null,
+        },
+      });
+    }
+
+    if (!startInBackground || demoMode) {
+      createWindow();
+      showOverlay({ focus: !demoMode });
+    }
+    if (demoMode) startDemo();
+  });
+}
+
+app.on("activate", () => showOverlay({ focus: true }));
+
+app.on("before-quit", () => {
+  isQuitting = true;
+  clearTimeout(hyprlandConfigurationTimer);
+  audioListener?.stop();
+  globalShortcut.unregisterAll();
+  void bridge?.close().catch((error) => debugLog("integration server close failed", error));
+});
+
+app.on("window-all-closed", () => {
+  // The tray, protocol handler, and adapter server keep Persona available.
+});
