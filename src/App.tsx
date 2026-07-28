@@ -15,7 +15,9 @@ export function App() {
   const [voice, setVoice] = useState<VoiceState>(INITIAL_STATE);
   const [audioLevel, setAudioLevel] = useState(0);
   const [animation, setAnimation] = useState<AnimationType>('IDLE');
+  const [talkTurn, setTalkTurn] = useState(0);
   const previousPhase = useRef<VoicePhase>('inactive');
+  const previousSpeaking = useRef(false);
 
   useEffect(() => {
     const bridge = window.personaBridge;
@@ -34,7 +36,16 @@ export function App() {
     });
   }, []);
 
+  const speaking =
+    voice.phase === 'active' &&
+    voice.activity === 'speaking' &&
+    !voice.outputMuted;
+
   useEffect(() => {
+    const startedSpeaking = speaking && !previousSpeaking.current;
+    previousSpeaking.current = speaking;
+    if (startedSpeaking) setTalkTurn((turn) => turn + 1);
+
     if (voice.phase === 'active' && previousPhase.current !== 'active') {
       setAnimation('GREETING');
       const timer = window.setTimeout(
@@ -59,9 +70,7 @@ export function App() {
 
     const timer = window.setTimeout(() => setAnimation('IDLE'), BODY_IDLE_DELAY_MS);
     return () => window.clearTimeout(timer);
-  }, [voice.activity, voice.outputMuted, voice.phase]);
-
-  const speaking = voice.phase === 'active' && voice.activity === 'speaking' && !voice.outputMuted;
+  }, [speaking, voice.activity, voice.outputMuted, voice.phase]);
 
   return (
     <main className="app">
@@ -69,6 +78,7 @@ export function App() {
         animation={animation}
         audioLevel={audioLevel}
         speaking={speaking}
+        talkTurn={talkTurn}
       />
     </main>
   );

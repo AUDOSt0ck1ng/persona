@@ -37,13 +37,8 @@ npm install
 npm run demo
 ```
 
-Demo mode drives the production character view with a synthetic level. To run
-normal automatic detection:
-
-```bash
-npm run build
-npm start
-```
+`npm run demo` builds the current renderer and launches Persona with normal
+automatic voice-output detection.
 
 For a background launch:
 

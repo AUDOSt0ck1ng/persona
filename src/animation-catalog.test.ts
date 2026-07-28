@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ANIMATION_CATALOG, ANIMATION_MAP, randomAnimation } from './animation-catalog';
+import {
+  ANIMATION_CATALOG,
+  ANIMATION_MAP,
+  nextAnimation,
+  randomAnimation,
+} from './animation-catalog';
 
 describe('Persona animation contract', () => {
   it('uses every stable replacement slot exactly once in the catalog', () => {
@@ -25,5 +30,19 @@ describe('Persona animation contract', () => {
     expect(randomAnimation('CELEBRATE')).toBe('celebrate2.vrma');
     expect(randomAnimation('DANCE')).toBe('dance2.vrma');
     vi.restoreAllMocks();
+  });
+
+  it('cycles through every talking clip without consecutive repeats', () => {
+    const first = nextAnimation('TALK');
+    const second = nextAnimation('TALK', first);
+    const third = nextAnimation('TALK', second);
+    const wrapped = nextAnimation('TALK', third);
+
+    expect([first, second, third]).toEqual([
+      'talk1.vrma',
+      'talk2.vrma',
+      'talk3.vrma',
+    ]);
+    expect(wrapped).toBe(first);
   });
 });

@@ -25,7 +25,6 @@ const { parseProtocolUrl, voiceState } = require("./protocol-actions.cjs");
 const WINDOW_WIDTH = 430;
 const WINDOW_HEIGHT = 680;
 const startInBackground = process.argv.includes("--background");
-const demoMode = process.argv.includes("--demo");
 const protocolScheme = "persona";
 const debugEnabled = process.env.PERSONA_DEBUG === "1";
 
@@ -312,18 +311,6 @@ function createTray() {
   tray.on("click", toggleOverlay);
 }
 
-function startDemo() {
-  handleBridgeEvent(voiceState("speaking"));
-  let phase = 0;
-  setInterval(() => {
-    phase += 0.21;
-    handleBridgeEvent({
-      type: "audio-level",
-      level: 0.1 + Math.abs(Math.sin(phase) * Math.sin(phase * 2.37)) * 0.34,
-    });
-  }, 40).unref?.();
-}
-
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
@@ -371,28 +358,26 @@ if (!app.requestSingleInstanceLock()) {
     globalShortcut.register("CommandOrControl+Shift+A", toggleOverlay);
     handleProtocolArgv(process.argv);
 
-    if (!demoMode) {
-      audioListener = createAudioListener({
-        isPackaged: app.isPackaged,
-        resourcesPath: process.resourcesPath,
-        onActivity: (activity) => {
-          debugLog("listener activity", activity);
-          handleBridgeEvent(voiceState(activity));
-        },
-        onDebug: debugEnabled ? (nodes) => debugLog("listener output nodes", nodes) : null,
-        onLevel: (level) => handleBridgeEvent({ type: "audio-level", level }),
-        onSession: (active) => {
-          debugLog("listener session", active);
-          handleBridgeEvent(voiceState(active ? "listening" : "idle", active ? "active" : "inactive"));
-        },
-        onStatus: (status) => {
-          debugLog("listener status", status);
-          handleListenerStatus(status);
-        },
-      });
-      if (audioListener) void audioListener.start();
-    }
-    if (!audioListener && !demoMode) {
+    audioListener = createAudioListener({
+      isPackaged: app.isPackaged,
+      resourcesPath: process.resourcesPath,
+      onActivity: (activity) => {
+        debugLog("listener activity", activity);
+        handleBridgeEvent(voiceState(activity));
+      },
+      onDebug: debugEnabled ? (nodes) => debugLog("listener output nodes", nodes) : null,
+      onLevel: (level) => handleBridgeEvent({ type: "audio-level", level }),
+      onSession: (active) => {
+        debugLog("listener session", active);
+        handleBridgeEvent(voiceState(active ? "listening" : "idle", active ? "active" : "inactive"));
+      },
+      onStatus: (status) => {
+        debugLog("listener status", status);
+        handleListenerStatus(status);
+      },
+    });
+    if (audioListener) void audioListener.start();
+    if (!audioListener) {
       handleListenerStatus({
         available: false,
         capturing: false,
@@ -401,11 +386,10 @@ if (!app.requestSingleInstanceLock()) {
       });
     }
 
-    if (!startInBackground || demoMode) {
+    if (!startInBackground) {
       createWindow();
-      showOverlay({ focus: !demoMode });
+      showOverlay({ focus: true });
     }
-    if (demoMode) startDemo();
   });
 }
 
