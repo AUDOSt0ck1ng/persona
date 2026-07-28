@@ -28,3 +28,12 @@ export function randomAnimation(type: AnimationType): string {
   const choices = ANIMATION_MAP[type];
   return choices[Math.floor(Math.random() * choices.length)]!;
 }
+
+export function nextAnimation(
+  type: AnimationType,
+  previous: string | null = null,
+): string {
+  const choices = ANIMATION_MAP[type];
+  const previousIndex = previous == null ? -1 : choices.indexOf(previous);
+  return choices[(previousIndex + 1) % choices.length]!;
+}

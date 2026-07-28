@@ -37,7 +37,7 @@
     "test:renderer": "vitest run",
     "lint": "eslint .",
     "start": "electron .",
-    "demo": "electron . --demo",
+    "demo": "npm run build && electron .",
     "assets:check": "node scripts/check-assets.cjs",
     "assets:release": "node scripts/check-assets.cjs --release",
     "native:build": "node scripts/build-native.cjs",
@@ -53,6 +53,7 @@
     "@eslint/js": "^10.0.1",
     "@pixiv/three-vrm": "^3.4.4",
     "@pixiv/three-vrm-animation": "^3.4.4",
+    "@pmndrs/assets": "^1.7.0",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.4.2",
     "@types/node": "^24.10.1",
@@ -160,5 +161,9 @@
         }
       ]
     }
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^4.4.3"
   }
 }

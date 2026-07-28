@@ -13,6 +13,7 @@ const {
   Tray,
 } = require("electron");
 const { createBridgeServer, DEFAULT_PORT } = require("./bridge-server.cjs");
+const { createPersonaMcpHandler } = require("./mcp-server.cjs");
 const {
   configureHyprlandWindow,
   getHyprlandWindowPlacement,
@@ -24,7 +25,6 @@ const { parseProtocolUrl, voiceState } = require("./protocol-actions.cjs");
 const WINDOW_WIDTH = 430;
 const WINDOW_HEIGHT = 680;
 const startInBackground = process.argv.includes("--background");
-const demoMode = process.argv.includes("--demo");
 const protocolScheme = "persona";
 const debugEnabled = process.env.PERSONA_DEBUG === "1";
 
@@ -32,6 +32,8 @@ let avatarWindow = null;
 let bridge = null;
 let isQuitting = false;
 let latestEvent = null;
+let latestListenerStatus = null;
+let latestVoiceState = null;
 let audioListener = null;
 let tray = null;
 let hyprlandConfigured = false;
@@ -230,6 +232,7 @@ function emitToRenderer(event) {
 function handleBridgeEvent(event) {
   if (event.type !== "audio-level" || event.level > 0.025) debugLog("event", event);
   if (event.type === "state") {
+    latestVoiceState = event.state;
     if (event.state.phase === "starting" || event.state.phase === "active") {
       showOverlay();
     }
@@ -239,6 +242,27 @@ function handleBridgeEvent(event) {
     showOverlay();
   }
   emitToRenderer(event);
+}
+
+function handleListenerStatus(status) {
+  latestListenerStatus = status;
+  emitToRenderer({ type: "listener-status", status });
+}
+
+async function handleMcpWindowAction(action) {
+  if (action === "show") showOverlay({ focus: true });
+  else if (action === "hide") await hideOverlay();
+  else if (avatarWindow?.isVisible()) await hideOverlay();
+  else showOverlay({ focus: true });
+  return avatarWindow?.isVisible() ?? false;
+}
+
+function getMcpStatus() {
+  return {
+    windowVisible: avatarWindow?.isVisible() ?? false,
+    voiceState: latestVoiceState,
+    listener: latestListenerStatus,
+  };
 }
 
 function handleProtocolUrl(rawUrl) {
@@ -287,18 +311,6 @@ function createTray() {
   tray.on("click", toggleOverlay);
 }
 
-function startDemo() {
-  handleBridgeEvent(voiceState("speaking"));
-  let phase = 0;
-  setInterval(() => {
-    phase += 0.21;
-    handleBridgeEvent({
-      type: "audio-level",
-      level: 0.1 + Math.abs(Math.sin(phase) * Math.sin(phase * 2.37)) * 0.34,
-    });
-  }, 40).unref?.();
-}
-
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
@@ -321,9 +333,16 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.handle("persona:get-snapshot", () => latestEvent);
     ipcMain.on("persona:hide", () => void hideOverlay());
 
+    const mcpHandler = createPersonaMcpHandler({
+      onAnimation: (animation) =>
+        handleBridgeEvent({ type: "animation", animation: animation.toUpperCase() }),
+      onWindowAction: handleMcpWindowAction,
+      getStatus: getMcpStatus,
+    });
     bridge = createBridgeServer({
       port: Number(process.env.PERSONA_BRIDGE_PORT || DEFAULT_PORT),
       onEvent: handleBridgeEvent,
+      mcpHandler,
     });
     try {
       await bridge.listen();
@@ -339,44 +358,38 @@ if (!app.requestSingleInstanceLock()) {
     globalShortcut.register("CommandOrControl+Shift+A", toggleOverlay);
     handleProtocolArgv(process.argv);
 
-    if (!demoMode) {
-      audioListener = createAudioListener({
-        isPackaged: app.isPackaged,
-        resourcesPath: process.resourcesPath,
-        onActivity: (activity) => {
-          debugLog("listener activity", activity);
-          handleBridgeEvent(voiceState(activity));
-        },
-        onDebug: debugEnabled ? (nodes) => debugLog("listener output nodes", nodes) : null,
-        onLevel: (level) => handleBridgeEvent({ type: "audio-level", level }),
-        onSession: (active) => {
-          debugLog("listener session", active);
-          handleBridgeEvent(voiceState(active ? "listening" : "idle", active ? "active" : "inactive"));
-        },
-        onStatus: (status) => {
-          debugLog("listener status", status);
-          emitToRenderer({ type: "listener-status", status });
-        },
-      });
-      if (audioListener) void audioListener.start();
-    }
-    if (!audioListener && !demoMode) {
-      emitToRenderer({
-        type: "listener-status",
-        status: {
-          available: false,
-          capturing: false,
-          monitoring: false,
-          source: null,
-        },
+    audioListener = createAudioListener({
+      isPackaged: app.isPackaged,
+      resourcesPath: process.resourcesPath,
+      onActivity: (activity) => {
+        debugLog("listener activity", activity);
+        handleBridgeEvent(voiceState(activity));
+      },
+      onDebug: debugEnabled ? (nodes) => debugLog("listener output nodes", nodes) : null,
+      onLevel: (level) => handleBridgeEvent({ type: "audio-level", level }),
+      onSession: (active) => {
+        debugLog("listener session", active);
+        handleBridgeEvent(voiceState(active ? "listening" : "idle", active ? "active" : "inactive"));
+      },
+      onStatus: (status) => {
+        debugLog("listener status", status);
+        handleListenerStatus(status);
+      },
+    });
+    if (audioListener) void audioListener.start();
+    if (!audioListener) {
+      handleListenerStatus({
+        available: false,
+        capturing: false,
+        monitoring: false,
+        source: null,
       });
     }
 
-    if (!startInBackground || demoMode) {
+    if (!startInBackground) {
       createWindow();
-      showOverlay({ focus: !demoMode });
+      showOverlay({ focus: true });
     }
-    if (demoMode) startDemo();
   });
 }
 

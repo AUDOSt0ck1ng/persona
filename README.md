@@ -37,19 +37,27 @@ npm install
 npm run demo
 ```
 
-Demo mode drives the production character view with a synthetic level. To run
-normal automatic detection:
-
-```bash
-npm run build
-npm start
-```
+`npm run demo` builds the current renderer and launches Persona with normal
+automatic voice-output detection.
 
 For a background launch:
 
 ```bash
 npm start -- --background
 ```
+
+## Connect Persona to Codex
+
+With Persona running, register its local MCP server:
+
+```bash
+codex mcp add persona --url http://127.0.0.1:47831/mcp
+```
+
+New Codex sessions can then ask Persona to play an installed animation, show or
+hide its window, and report whether the local character and voice listener are
+active. Persona remains a separate desktop application; the MCP connection
+only exposes its own visual controls.
 
 The window intentionally contains no controls:
 
@@ -122,7 +130,7 @@ Windows. Linux captures activity through PipeWire and does not build a helper.
 More detail:
 
 - [Architecture and development](docs/DEVELOPMENT.md)
-- [Integration API](docs/INTEGRATIONS.md)
+- [Codex and integration API](docs/INTEGRATIONS.md)
 - [Release process](docs/RELEASING.md)
 - [Security policy](SECURITY.md)
 

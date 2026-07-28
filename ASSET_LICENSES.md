@@ -3,6 +3,12 @@
 The MIT license covers Persona's application source. It does not grant rights
 to the VRM or VRMA files under `public/assets/`.
 
+## Bundled environment
+
+Persona includes the `dawn.exr` environment from `@pmndrs/assets`. The asset
+collection is published under CC0 1.0 and sources its HDR environments from
+Poly Haven.
+
 ## Local development media
 
 VRM and VRMA files are intentionally ignored by Git. Any local files without a

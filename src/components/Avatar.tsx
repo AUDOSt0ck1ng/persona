@@ -1,5 +1,6 @@
-import { Suspense, useEffect } from 'react';
+import { Suspense, useEffect, useLayoutEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
+import type * as THREE from 'three';
 import { useVrmLoader } from '../hooks/useVrmLoader';
 import { useVrmAnimation } from '../hooks/useVrmAnimation';
 import { useAmplitudeLipSync } from '../hooks/useAmplitudeLipSync';
@@ -10,17 +11,31 @@ interface AvatarProps {
   animation: AnimationType;
   audioLevel: number;
   speaking: boolean;
+  talkTurn: number;
+  onReady?: (scene: THREE.Object3D) => void;
 }
 
-function AvatarModel({ animation, audioLevel, speaking }: AvatarProps) {
+function AvatarModel({
+  animation,
+  audioLevel,
+  speaking,
+  talkTurn,
+  onReady,
+}: AvatarProps) {
   const vrm = useVrmLoader('./assets/model.vrm');
   const { play, update: updateAnimation } = useVrmAnimation(vrm);
   const updateLipSync = useAmplitudeLipSync(vrm);
   const updateBlink = useBlink(vrm);
 
+  const animationRequest = animation === 'TALK' ? talkTurn : 0;
+
   useEffect(() => {
     void play(animation);
-  }, [animation, play]);
+  }, [animation, animationRequest, play]);
+
+  useLayoutEffect(() => {
+    if (vrm) onReady?.(vrm.scene);
+  }, [onReady, vrm]);
 
   useFrame((_, delta) => {
     if (!vrm) return;
