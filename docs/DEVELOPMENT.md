@@ -7,12 +7,33 @@ Persona has four intentionally narrow layers:
 1. Native listeners discover a supported voice process and calculate a
    normalized output level.
 2. The Electron main process owns lifecycle, window behavior, tray commands,
-   URL handling, and the local adapter.
+   URL handling, the local adapter, and Persona's MCP controls.
 3. The sandboxed preload exposes only normalized Persona events.
 4. React and Three.js render the model, blend VRMA motion, and drive VRM
    expressions.
 
 No renderer code has filesystem, process, or raw-audio access.
+
+## MCP contract
+
+`electron/mcp-server.cjs` owns the Codex-facing tool schemas and translates
+validated tool calls into narrow main-process callbacks. It does not receive
+the Electron application object, renderer access, arbitrary animation paths, or
+shell execution.
+
+The existing loopback server routes `POST /mcp` into a fresh stateless
+Streamable HTTP transport for each request. This keeps the MCP layer
+request-response only: Persona does not need sessions, server-initiated
+notifications, or an additional listening port.
+
+When extending the server:
+
+- prefer a small product action over exposing an internal Electron primitive;
+- validate every argument with a closed schema;
+- mark read-only and side-effecting tools accurately;
+- keep the server instructions self-contained; and
+- add a protocol-level client test for discovery, valid calls, and rejected
+  input.
 
 ## Listener contract
 
@@ -61,10 +82,10 @@ electron-builder's bundled packaging tool.
 
 ## Test coverage
 
-The Node suite covers the bridge boundary, URL protocol, Hyprland rules,
-PipeWire selection and PCM normalization, process discovery on macOS and
-Windows, native NDJSON parsing, shared pause smoothing, listener lifecycle,
-asset safety, and release checksums.
+The Node suite covers MCP discovery and tool calls, the bridge boundary, URL
+protocol, Hyprland rules, PipeWire selection and PCM normalization, process
+discovery on macOS and Windows, native NDJSON parsing, shared pause smoothing,
+listener lifecycle, asset safety, and release checksums.
 
 Vitest covers the stable animation replacement contract. GitHub Actions then
 compiles and self-tests the native helper on its real operating system and

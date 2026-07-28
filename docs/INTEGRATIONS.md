@@ -10,6 +10,37 @@ cross-process realtime voice event stream. If an official event stream becomes
 available, it can map to the same contract without changing Persona's window or
 animation system.
 
+## Codex MCP server
+
+Persona serves a Streamable HTTP MCP endpoint while the app is running. Add it
+to Codex once:
+
+```bash
+codex mcp add persona --url http://127.0.0.1:47831/mcp
+```
+
+Start a new Codex session after registering the server. You can inspect the
+saved connection with:
+
+```bash
+codex mcp get persona
+```
+
+Persona exposes these tools:
+
+| Tool | Input | Effect |
+| --- | --- | --- |
+| `play_animation` | `animation`: `idle`, `greeting`, `talk`, `celebrate`, or `dance` | Shows Persona and plays an installed animation |
+| `control_window` | `action`: `show`, `hide`, or `toggle` | Controls the Persona window without quitting the app |
+| `get_status` | None | Reads window visibility, voice state, and listener status |
+
+The animation names are a stable product contract rather than file paths.
+Future character packs can replace the media behind those names without
+changing the MCP configuration or granting filesystem access.
+
+The MCP endpoint uses the same port as the local HTTP API. If
+`PERSONA_BRIDGE_PORT` changes it, update the URL registered with Codex to match.
+
 ## Automatic listeners
 
 ### Linux
@@ -62,7 +93,8 @@ Windows.
 
 Persona listens on `127.0.0.1:47831` by default. Override the port with
 `PERSONA_BRIDGE_PORT`. Native clients may omit `Origin`; browser clients are
-restricted to trusted local and supported app origins.
+restricted to trusted local and supported app origins. Requests with a
+non-loopback `Host` are rejected.
 
 Voice state:
 

@@ -13,6 +13,7 @@ const {
   Tray,
 } = require("electron");
 const { createBridgeServer, DEFAULT_PORT } = require("./bridge-server.cjs");
+const { createPersonaMcpHandler } = require("./mcp-server.cjs");
 const {
   configureHyprlandWindow,
   getHyprlandWindowPlacement,
@@ -32,6 +33,8 @@ let avatarWindow = null;
 let bridge = null;
 let isQuitting = false;
 let latestEvent = null;
+let latestListenerStatus = null;
+let latestVoiceState = null;
 let audioListener = null;
 let tray = null;
 let hyprlandConfigured = false;
@@ -230,6 +233,7 @@ function emitToRenderer(event) {
 function handleBridgeEvent(event) {
   if (event.type !== "audio-level" || event.level > 0.025) debugLog("event", event);
   if (event.type === "state") {
+    latestVoiceState = event.state;
     if (event.state.phase === "starting" || event.state.phase === "active") {
       showOverlay();
     }
@@ -239,6 +243,27 @@ function handleBridgeEvent(event) {
     showOverlay();
   }
   emitToRenderer(event);
+}
+
+function handleListenerStatus(status) {
+  latestListenerStatus = status;
+  emitToRenderer({ type: "listener-status", status });
+}
+
+async function handleMcpWindowAction(action) {
+  if (action === "show") showOverlay({ focus: true });
+  else if (action === "hide") await hideOverlay();
+  else if (avatarWindow?.isVisible()) await hideOverlay();
+  else showOverlay({ focus: true });
+  return avatarWindow?.isVisible() ?? false;
+}
+
+function getMcpStatus() {
+  return {
+    windowVisible: avatarWindow?.isVisible() ?? false,
+    voiceState: latestVoiceState,
+    listener: latestListenerStatus,
+  };
 }
 
 function handleProtocolUrl(rawUrl) {
@@ -321,9 +346,16 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.handle("persona:get-snapshot", () => latestEvent);
     ipcMain.on("persona:hide", () => void hideOverlay());
 
+    const mcpHandler = createPersonaMcpHandler({
+      onAnimation: (animation) =>
+        handleBridgeEvent({ type: "animation", animation: animation.toUpperCase() }),
+      onWindowAction: handleMcpWindowAction,
+      getStatus: getMcpStatus,
+    });
     bridge = createBridgeServer({
       port: Number(process.env.PERSONA_BRIDGE_PORT || DEFAULT_PORT),
       onEvent: handleBridgeEvent,
+      mcpHandler,
     });
     try {
       await bridge.listen();
@@ -355,20 +387,17 @@ if (!app.requestSingleInstanceLock()) {
         },
         onStatus: (status) => {
           debugLog("listener status", status);
-          emitToRenderer({ type: "listener-status", status });
+          handleListenerStatus(status);
         },
       });
       if (audioListener) void audioListener.start();
     }
     if (!audioListener && !demoMode) {
-      emitToRenderer({
-        type: "listener-status",
-        status: {
-          available: false,
-          capturing: false,
-          monitoring: false,
-          source: null,
-        },
+      handleListenerStatus({
+        available: false,
+        capturing: false,
+        monitoring: false,
+        source: null,
       });
     }
 
