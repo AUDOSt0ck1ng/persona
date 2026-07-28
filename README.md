@@ -113,10 +113,9 @@ assets/
     ├── talk2.vrma
     ├── talk3.vrma
     ├── greeting.vrma
-    ├── celebrate1.vrma
-    ├── celebrate2.vrma
-    ├── dance1.vrma
-    └── dance2.vrma
+    ├── happy.vrma
+    ├── finger-gun.vrma
+    └── dance.vrma
 ```
 
 Replace files in place, then complete every license and source field in

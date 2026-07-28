@@ -30,13 +30,18 @@ Persona exposes these tools:
 
 | Tool | Input | Effect |
 | --- | --- | --- |
-| `play_animation` | `animation`: `idle`, `greeting`, `talk`, `celebrate`, or `dance` | Shows Persona and plays an installed animation |
+| `play_animation` | `animation`: `idle`, `greeting`, `talk`, `happy`, `finger-gun`, or `dance` | Shows Persona and plays an installed animation once |
 | `control_window` | `action`: `show`, `hide`, or `toggle` | Controls the Persona window without quitting the app |
 | `get_status` | None | Reads window visibility, voice state, and listener status |
 
 The animation names are a stable product contract rather than file paths.
 Future character packs can replace the media behind those names without
 changing the MCP configuration or granting filesystem access.
+
+An MCP-triggered animation temporarily takes priority over voice-driven body
+motion. Lip sync continues while the clip plays. A newer MCP animation replaces
+the current one; when the one-shot clip finishes, Persona returns to the current
+idle, listening, or speaking state.
 
 The MCP endpoint uses the same port as the local HTTP API. If
 `PERSONA_BRIDGE_PORT` changes it, update the URL registered with Codex to match.
@@ -83,7 +88,8 @@ Installed packages register `persona://`.
 | `persona://speaking?level=0.3` | Begin speaking and optionally set a level |
 | `persona://inactive` | End the voice state without hiding Persona |
 | `persona://greeting` | Preview the greeting motion |
-| `persona://celebrate` | Preview a celebration motion |
+| `persona://happy` | Preview the happy motion |
+| `persona://finger-gun` | Preview the finger-gun motion |
 | `persona://dance` | Preview a dance motion |
 
 Open these URLs with `xdg-open` on Linux, `open` on macOS, or `start` on
@@ -131,7 +137,8 @@ Animation preview:
 }
 ```
 
-Allowed animations are `IDLE`, `GREETING`, `TALK`, `CELEBRATE`, and `DANCE`.
+Allowed animations are `IDLE`, `GREETING`, `TALK`, `HAPPY`, `FINGER_GUN`, and
+`DANCE`.
 
 Send events:
 

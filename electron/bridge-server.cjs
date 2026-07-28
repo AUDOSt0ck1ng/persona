@@ -7,7 +7,14 @@ const MAX_BODY_BYTES = 64 * 1024;
 const TRUSTED_ORIGIN =
   /^(?:https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?|codex-app:\/\/[A-Za-z0-9._~-]*)$/i;
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
-const ANIMATIONS = new Set(["IDLE", "GREETING", "TALK", "CELEBRATE", "DANCE"]);
+const ANIMATIONS = new Set([
+  "IDLE",
+  "GREETING",
+  "TALK",
+  "HAPPY",
+  "FINGER_GUN",
+  "DANCE",
+]);
 
 function isVoiceState(value) {
   return (

@@ -1,6 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Scene } from './components/Scene';
 import type { AnimationType } from './animation-catalog';
+import {
+  finishBodyAnimationOverride,
+  resolveBodyAnimation,
+  type BodyAnimationOverride,
+} from './animation-priority';
 
 const INITIAL_STATE: VoiceState = {
   activity: 'idle',
@@ -14,7 +19,9 @@ const BODY_IDLE_DELAY_MS = 650;
 export function App() {
   const [voice, setVoice] = useState<VoiceState>(INITIAL_STATE);
   const [audioLevel, setAudioLevel] = useState(0);
-  const [animation, setAnimation] = useState<AnimationType>('IDLE');
+  const [voiceAnimation, setVoiceAnimation] = useState<AnimationType>('IDLE');
+  const [bodyOverride, setBodyOverride] =
+    useState<BodyAnimationOverride | null>(null);
   const [talkTurn, setTalkTurn] = useState(0);
   const previousPhase = useRef<VoicePhase>('inactive');
   const previousSpeaking = useRef(false);
@@ -31,7 +38,14 @@ export function App() {
       } else if (event.type === 'audio-level') {
         setAudioLevel(event.level);
       } else if (event.type === 'animation') {
-        setAnimation(event.animation);
+        if (event.source === 'mcp' && event.requestId != null) {
+          setBodyOverride({
+            animation: event.animation,
+            requestId: event.requestId,
+          });
+        } else {
+          setVoiceAnimation(event.animation);
+        }
       }
     });
   }, []);
@@ -47,9 +61,9 @@ export function App() {
     if (startedSpeaking) setTalkTurn((turn) => turn + 1);
 
     if (voice.phase === 'active' && previousPhase.current !== 'active') {
-      setAnimation('GREETING');
+      setVoiceAnimation('GREETING');
       const timer = window.setTimeout(
-        () => setAnimation(voice.activity === 'speaking' ? 'TALK' : 'IDLE'),
+        () => setVoiceAnimation(voice.activity === 'speaking' ? 'TALK' : 'IDLE'),
         2600,
       );
       previousPhase.current = voice.phase;
@@ -58,27 +72,43 @@ export function App() {
     previousPhase.current = voice.phase;
 
     if (voice.phase !== 'active' || voice.outputMuted) {
-      setAnimation('IDLE');
+      setVoiceAnimation('IDLE');
       setAudioLevel(0);
       return;
     }
 
     if (voice.activity === 'speaking' && !voice.outputMuted) {
-      setAnimation('TALK');
+      setVoiceAnimation('TALK');
       return;
     }
 
-    const timer = window.setTimeout(() => setAnimation('IDLE'), BODY_IDLE_DELAY_MS);
+    const timer = window.setTimeout(
+      () => setVoiceAnimation('IDLE'),
+      BODY_IDLE_DELAY_MS,
+    );
     return () => window.clearTimeout(timer);
   }, [speaking, voice.activity, voice.outputMuted, voice.phase]);
+
+  const animation = resolveBodyAnimation(voiceAnimation, bodyOverride);
+  const animationRequest =
+    bodyOverride?.requestId ?? (animation === 'TALK' ? talkTurn : 0);
+  const overrideRequestId = bodyOverride?.requestId ?? null;
+  const handleAnimationComplete = useCallback(() => {
+    if (overrideRequestId == null) return;
+    setBodyOverride((current) =>
+      finishBodyAnimationOverride(current, overrideRequestId),
+    );
+  }, [overrideRequestId]);
 
   return (
     <main className="app">
       <Scene
         animation={animation}
+        animationRequest={animationRequest}
         audioLevel={audioLevel}
+        onAnimationComplete={handleAnimationComplete}
+        playback={bodyOverride ? 'once' : 'loop'}
         speaking={speaking}
-        talkTurn={talkTurn}
       />
     </main>
   );

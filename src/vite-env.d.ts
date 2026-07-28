@@ -24,7 +24,18 @@ interface AudioListenerStatus {
 type AvatarBridgeEvent =
   | { type: 'state'; state: VoiceState }
   | { type: 'audio-level'; level: number; bands?: Record<string, number> }
-  | { type: 'animation'; animation: 'IDLE' | 'GREETING' | 'TALK' | 'CELEBRATE' | 'DANCE' }
+  | {
+      type: 'animation';
+      animation:
+        | 'IDLE'
+        | 'GREETING'
+        | 'TALK'
+        | 'HAPPY'
+        | 'FINGER_GUN'
+        | 'DANCE';
+      source?: 'mcp';
+      requestId?: number;
+    }
   | { type: 'listener-status'; status: AudioListenerStatus }
   | { type: 'bridge-status'; connected: boolean };
 

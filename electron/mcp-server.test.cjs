@@ -12,6 +12,7 @@ const {
   SERVER_INSTRUCTIONS,
   WINDOW_ACTIONS,
   createPersonaMcpHandler,
+  getAnimationEventName,
 } = require("./mcp-server.cjs");
 
 test("Persona MCP exposes and executes the local character tools", async (context) => {
@@ -79,7 +80,7 @@ test("Persona MCP exposes and executes the local character tools", async (contex
 
   const animationResult = await client.callTool({
     name: "play_animation",
-    arguments: { animation: "dance" },
+    arguments: { animation: "finger-gun" },
   });
   const windowResult = await client.callTool({
     name: "control_window",
@@ -90,15 +91,22 @@ test("Persona MCP exposes and executes the local character tools", async (contex
     arguments: {},
   });
 
-  assert.deepEqual(animations, ["dance"]);
+  assert.deepEqual(animations, ["finger-gun"]);
   assert.deepEqual(windowActions, ["show"]);
-  assert.match(animationResult.content[0].text, /dance animation/);
+  assert.match(animationResult.content[0].text, /finger-gun animation/);
   assert.match(windowResult.content[0].text, /now visible/);
   assert.deepEqual(JSON.parse(statusResult.content[0].text), {
     windowVisible: true,
     voiceState,
     listener,
   });
+});
+
+test("Persona MCP maps semantic animation names to renderer events", () => {
+  assert.equal(getAnimationEventName("happy"), "HAPPY");
+  assert.equal(getAnimationEventName("finger-gun"), "FINGER_GUN");
+  assert.equal(getAnimationEventName("dance"), "DANCE");
+  assert.equal(getAnimationEventName("celebrate"), null);
 });
 
 test("Persona MCP rejects unknown animation names before invoking the app", async (context) => {

@@ -8,6 +8,22 @@ import {
 import type { VRM } from '@pixiv/three-vrm';
 import * as THREE from 'three';
 import { nextAnimation, type AnimationType } from '../animation-catalog';
+import {
+  configureAnimationAction,
+  crossFadeAnimationActions,
+  type AnimationPlayback,
+} from '../animation-action';
+
+interface PlayOptions {
+  onComplete?: () => void;
+  playback?: AnimationPlayback;
+}
+
+interface PendingCompletion {
+  action: THREE.AnimationAction;
+  callback: () => void;
+  generation: number;
+}
 
 function transitionSeconds(previous: AnimationType | null, next: AnimationType): number {
   if (previous === 'TALK' && next === 'IDLE') return 1.15;
@@ -22,16 +38,32 @@ export function useVrmAnimation(vrm: VRM | null) {
   const cache = useRef(new Map<string, VRMAnimation>());
   const previousAnimation = useRef(new Map<AnimationType, string>());
   const requestGeneration = useRef(0);
+  const pendingCompletion = useRef<PendingCompletion | null>(null);
 
   useEffect(() => {
     if (!vrm) return;
     const animationHistory = previousAnimation.current;
-    mixer.current = new THREE.AnimationMixer(vrm.scene);
+    const animationMixer = new THREE.AnimationMixer(vrm.scene);
+    const handleFinished = ({ action }: { action: THREE.AnimationAction }) => {
+      const pending = pendingCompletion.current;
+      if (
+        pending?.action !== action ||
+        pending.generation !== requestGeneration.current
+      ) {
+        return;
+      }
+      pendingCompletion.current = null;
+      pending.callback();
+    };
+    animationMixer.addEventListener('finished', handleFinished);
+    mixer.current = animationMixer;
     return () => {
-      mixer.current?.stopAllAction();
+      animationMixer.removeEventListener('finished', handleFinished);
+      animationMixer.stopAllAction();
       mixer.current = null;
       current.current = null;
       currentType.current = null;
+      pendingCompletion.current = null;
       animationHistory.clear();
     };
   }, [vrm]);
@@ -49,9 +81,16 @@ export function useVrmAnimation(vrm: VRM | null) {
   }, []);
 
   const play = useCallback(
-    async (type: AnimationType) => {
-      if (!vrm || !mixer.current) return;
+    async (
+      type: AnimationType,
+      { onComplete, playback = 'loop' }: PlayOptions = {},
+    ) => {
+      if (!vrm || !mixer.current) {
+        if (playback === 'once') onComplete?.();
+        return;
+      }
       const generation = ++requestGeneration.current;
+      pendingCompletion.current = null;
       try {
         const path = nextAnimation(
           type,
@@ -62,17 +101,25 @@ export function useVrmAnimation(vrm: VRM | null) {
         if (generation !== requestGeneration.current || !mixer.current) return;
         const action = mixer.current.clipAction(createVRMAnimationClip(animation, vrm));
         const fadeSeconds = transitionSeconds(currentType.current, type);
-        current.current?.fadeOut(fadeSeconds);
-        action
-          .reset()
-          .setLoop(THREE.LoopRepeat, Infinity)
-          .setEffectiveWeight(1)
-          .fadeIn(fadeSeconds)
-          .play();
+        action.reset();
+        configureAnimationAction(action, playback);
+        if (playback === 'once') {
+          if (onComplete) {
+            pendingCompletion.current = {
+              action,
+              callback: onComplete,
+              generation,
+            };
+          }
+        }
+        crossFadeAnimationActions(current.current, action, fadeSeconds);
         current.current = action;
         currentType.current = type;
       } catch (error) {
         console.warn('[persona] animation load failed', error);
+        if (generation === requestGeneration.current && playback === 'once') {
+          onComplete?.();
+        }
       }
     },
     [load, vrm],

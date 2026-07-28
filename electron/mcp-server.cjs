@@ -8,7 +8,15 @@ const z = require("zod/v4");
 const { version } = require("../package.json");
 
 const MCP_PATH = "/mcp";
-const ANIMATION_NAMES = ["idle", "greeting", "talk", "celebrate", "dance"];
+const ANIMATION_EVENT_NAMES = {
+  idle: "IDLE",
+  greeting: "GREETING",
+  talk: "TALK",
+  happy: "HAPPY",
+  "finger-gun": "FINGER_GUN",
+  dance: "DANCE",
+};
+const ANIMATION_NAMES = Object.keys(ANIMATION_EVENT_NAMES);
 const WINDOW_ACTIONS = ["show", "hide", "toggle"];
 const SERVER_INSTRUCTIONS =
   "Persona controls the installed local desktop character. Use play_animation when the user asks for a visual reaction or it clearly supports their request. Use control_window to show, hide, or toggle Persona. Persona never speaks or plays audio. get_status is read-only.";
@@ -17,6 +25,10 @@ function textResult(text) {
   return {
     content: [{ type: "text", text }],
   };
+}
+
+function getAnimationEventName(animation) {
+  return ANIMATION_EVENT_NAMES[animation] ?? null;
 }
 
 function createPersonaMcpServer({ onAnimation, onWindowAction, getStatus }) {
@@ -35,7 +47,7 @@ function createPersonaMcpServer({ onAnimation, onWindowAction, getStatus }) {
     {
       title: "Play Persona animation",
       description:
-        "Play one of Persona's installed character animations in the desktop window. This also shows Persona.",
+        "Play one installed character animation once in the desktop window. This shows Persona and temporarily takes priority over voice-driven body motion.",
       inputSchema: {
         animation: z
           .enum(ANIMATION_NAMES)
@@ -126,10 +138,12 @@ function createPersonaMcpHandler(controller) {
 }
 
 module.exports = {
+  ANIMATION_EVENT_NAMES,
   ANIMATION_NAMES,
   MCP_PATH,
   SERVER_INSTRUCTIONS,
   WINDOW_ACTIONS,
   createPersonaMcpHandler,
   createPersonaMcpServer,
+  getAnimationEventName,
 };

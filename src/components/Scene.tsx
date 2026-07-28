@@ -10,9 +10,11 @@ import { calculateFullBodyFraming } from '../camera-framing';
 
 interface SceneProps {
   animation: AnimationType;
+  animationRequest: number;
   audioLevel: number;
+  onAnimationComplete: () => void;
+  playback: 'loop' | 'once';
   speaking: boolean;
-  talkTurn: number;
 }
 
 interface TargetControls {

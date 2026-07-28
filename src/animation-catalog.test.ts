@@ -9,11 +9,10 @@ import {
 describe('Persona animation contract', () => {
   it('uses every stable replacement slot exactly once in the catalog', () => {
     expect(Object.values(ANIMATION_CATALOG).sort()).toEqual([
-      'celebrate1.vrma',
-      'celebrate2.vrma',
-      'dance1.vrma',
-      'dance2.vrma',
+      'dance.vrma',
+      'finger-gun.vrma',
       'greeting.vrma',
+      'happy.vrma',
       'idle.vrma',
       'talk1.vrma',
       'talk2.vrma',
@@ -21,14 +20,14 @@ describe('Persona animation contract', () => {
     ]);
     expect(ANIMATION_MAP.IDLE).toEqual(['idle.vrma']);
     expect(ANIMATION_MAP.TALK).toHaveLength(3);
-    expect(ANIMATION_MAP.DANCE).toHaveLength(2);
+    expect(ANIMATION_MAP.HAPPY).toEqual(['happy.vrma']);
+    expect(ANIMATION_MAP.FINGER_GUN).toEqual(['finger-gun.vrma']);
+    expect(ANIMATION_MAP.DANCE).toEqual(['dance.vrma']);
   });
 
-  it('can select every multi-clip category without escaping that category', () => {
+  it('can select the last talking clip without escaping that category', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.999);
     expect(randomAnimation('TALK')).toBe('talk3.vrma');
-    expect(randomAnimation('CELEBRATE')).toBe('celebrate2.vrma');
-    expect(randomAnimation('DANCE')).toBe('dance2.vrma');
     vi.restoreAllMocks();
   });
 

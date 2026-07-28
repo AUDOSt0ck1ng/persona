@@ -40,25 +40,19 @@
       "source": null
     },
     {
-      "path": "animations/celebrate1.vrma",
-      "role": "celebrate",
+      "path": "animations/happy.vrma",
+      "role": "happy",
       "license": null,
       "source": null
     },
     {
-      "path": "animations/celebrate2.vrma",
-      "role": "celebrate",
+      "path": "animations/finger-gun.vrma",
+      "role": "finger-gun",
       "license": null,
       "source": null
     },
     {
-      "path": "animations/dance1.vrma",
-      "role": "dance",
-      "license": null,
-      "source": null
-    },
-    {
-      "path": "animations/dance2.vrma",
+      "path": "animations/dance.vrma",
       "role": "dance",
       "license": null,
       "source": null
