@@ -122,6 +122,7 @@ class NativeProcessAudioListener {
     this.pollInFlight = true;
     try {
       const processes = await this.processDiscovery({ platform: this.platform });
+      if (this.stopped) return;
       const selectedPids =
         this.platform === "win32" ? processes.rootPids.slice(0, 1) : processes.pids;
       const key = selectedPids.join(",");

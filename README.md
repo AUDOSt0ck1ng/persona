@@ -37,8 +37,27 @@ Requirements:
 - npm
 - A desktop session with hardware-accelerated graphics
 
-Character media is not part of the repository. Before launching, place local
-test media or redistributable media in the exact slots documented below.
+The packaged character catalog is intentionally empty while the distributable
+defaults are being selected. Persona opens Settings on first launch so you can
+import a local `.vrm` model; ignored media files under `public/assets/` are not
+loaded unless they are declared in the catalog.
+
+To exercise the packaged-library path with the current ignored local test
+media, copy the provided examples over the active empty catalogs:
+
+```bash
+cp public/assets/library.json.example public/assets/library.json
+cp public/assets/manifest.json.example public/assets/manifest.json
+```
+
+Both example files are directly usable and also document the complete catalog
+format. Their media remains test-only: the example manifest deliberately keeps
+distribution disabled and its license fields incomplete.
+
+Packaged VRM files belong under `public/assets/models/`; packaged VRMA files
+belong under `public/assets/animations/`. A catalog can declare multiple
+packaged models. When `default_model_id` is `null`, Persona selects the first
+model record as the packaged default.
 
 ```bash
 npm install
@@ -53,6 +72,33 @@ For a background launch:
 ```bash
 npm start -- --background
 ```
+
+## Customize Persona
+
+Open **Settings…** from Persona's tray menu to manage the character library.
+You can preview installed models and animation actions together, choose the
+default model, set the character's initial size, and add your own `.vrm` and
+`.vrma` files.
+
+Until a default model exists, Persona does not create the avatar window or
+start its voice-output listener. The first imported model becomes the default
+automatically.
+
+Persona always provides **Idle** and **Speaking** action slots. They begin
+without media, so the model keeps its normal pose until you add clips. Each
+action can contain multiple `.vrma` files; uploads receive numbered names such
+as `idle1`, `idle2`, `speaking1`, or `wave1`. Persona chooses a clip from the
+action whenever that action runs.
+
+Custom actions include a name, description, and trigger scenario. Persona adds
+that metadata to its MCP animation tool so a connected agent can understand
+what the action expresses and when to use it. Imported media and configuration
+changes stay in Persona's local application data.
+
+Packaged media is immutable. Editing or removing a packaged action creates a
+user-level override without changing the installed application. **Reset
+packaged actions** restores shipped metadata and visibility while leaving
+user-created actions and uploaded clips untouched.
 
 ## Connect Persona to Codex
 
@@ -101,27 +147,30 @@ asset release gate passes. See [Releasing](docs/RELEASING.md).
 ## Replace the character assets before publishing
 
 Character media is intentionally excluded from Git. Local test files must not
-be distributed. Persona's stable replacement slots are:
+be distributed. The packaged library is declared without a hard-coded filename
+contract in source code:
 
 ```text
-assets/
-├── model.vrm
+public/assets/
+├── library.json
+├── library.json.example
 ├── manifest.json
+├── manifest.json.example
+├── models/
+│   └── <model files declared by library.json>
 └── animations/
-    ├── idle.vrma
-    ├── talk1.vrma
-    ├── talk2.vrma
-    ├── talk3.vrma
-    ├── greeting.vrma
-    ├── happy.vrma
-    ├── finger-gun.vrma
-    └── dance.vrma
+    └── <animation files declared by library.json>
 ```
 
-Replace files in place, then complete every license and source field in
-`manifest.json` and set `distributionAllowed` to `true`. Remove the VRM and
-VRMA ignore rules only when those exact files are safe to publish. The release
-workflow will fail closed until then. Read [Asset licenses](ASSET_LICENSES.md).
+Define each packaged model and animation action in `library.json`. Action
+records carry their public name, description, trigger scenario, runtime type,
+and zero or more asset paths. The permanent `system-idle` and
+`system-speaking` records may have empty asset lists. Mirror every declared
+media path in `manifest.json`, then
+complete its license and source fields and set `distributionAllowed` to `true`.
+Remove the VRM and VRMA ignore rules only when the chosen files are safe to
+publish. The release workflow will fail closed until then. Read
+[Asset licenses](ASSET_LICENSES.md).
 
 ## Development
 

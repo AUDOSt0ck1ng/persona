@@ -5,12 +5,14 @@ import { useVrmLoader } from '../hooks/useVrmLoader';
 import { useVrmAnimation } from '../hooks/useVrmAnimation';
 import { useAmplitudeLipSync } from '../hooks/useAmplitudeLipSync';
 import { useBlink } from '../hooks/useBlink';
-import type { AnimationType } from '../animation-catalog';
+import type { PlayableAnimationType } from '../animation-catalog';
 
 interface AvatarProps {
-  animation: AnimationType;
+  animation: PlayableAnimationType;
   animationRequest: number;
+  animationUrls?: readonly string[];
   audioLevel: number;
+  modelUrl: string;
   onAnimationComplete: () => void;
   playback: 'loop' | 'once';
   speaking: boolean;
@@ -20,20 +22,33 @@ interface AvatarProps {
 function AvatarModel({
   animation,
   animationRequest,
+  animationUrls,
   audioLevel,
+  modelUrl,
   onAnimationComplete,
   playback,
   speaking,
   onReady,
 }: AvatarProps) {
-  const vrm = useVrmLoader('./assets/model.vrm');
+  const vrm = useVrmLoader(modelUrl);
   const { play, update: updateAnimation } = useVrmAnimation(vrm);
   const updateLipSync = useAmplitudeLipSync(vrm);
   const updateBlink = useBlink(vrm);
 
   useEffect(() => {
-    void play(animation, { onComplete: onAnimationComplete, playback });
-  }, [animation, animationRequest, onAnimationComplete, play, playback]);
+    void play(animation, {
+      animationUrls,
+      onComplete: onAnimationComplete,
+      playback,
+    });
+  }, [
+    animation,
+    animationRequest,
+    animationUrls,
+    onAnimationComplete,
+    play,
+    playback,
+  ]);
 
   useLayoutEffect(() => {
     if (vrm) onReady?.(vrm.scene);

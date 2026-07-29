@@ -1,14 +1,3 @@
-export const ANIMATION_CATALOG = {
-  idle: 'idle.vrma',
-  talk1: 'talk1.vrma',
-  talk2: 'talk2.vrma',
-  talk3: 'talk3.vrma',
-  greeting: 'greeting.vrma',
-  happy: 'happy.vrma',
-  fingerGun: 'finger-gun.vrma',
-  dance: 'dance.vrma',
-} as const;
-
 export type AnimationType =
   | 'IDLE'
   | 'GREETING'
@@ -16,30 +5,38 @@ export type AnimationType =
   | 'HAPPY'
   | 'FINGER_GUN'
   | 'DANCE';
+export type PlayableAnimationType = AnimationType | 'CUSTOM';
 
-export const ANIMATION_MAP: Record<AnimationType, readonly string[]> = {
-  IDLE: [ANIMATION_CATALOG.idle],
-  GREETING: [ANIMATION_CATALOG.greeting],
-  TALK: [
-    ANIMATION_CATALOG.talk1,
-    ANIMATION_CATALOG.talk2,
-    ANIMATION_CATALOG.talk3,
-  ],
-  HAPPY: [ANIMATION_CATALOG.happy],
-  FINGER_GUN: [ANIMATION_CATALOG.fingerGun],
-  DANCE: [ANIMATION_CATALOG.dance],
-};
-
-export function randomAnimation(type: AnimationType): string {
-  const choices = ANIMATION_MAP[type];
-  return choices[Math.floor(Math.random() * choices.length)]!;
+export function immediateVoiceAnimation(
+  voice: Pick<VoiceState, 'activity' | 'outputMuted' | 'phase'>,
+): 'IDLE' | 'TALK' | null {
+  if (voice.phase !== 'active' || voice.outputMuted) return 'IDLE';
+  if (voice.activity === 'speaking') return 'TALK';
+  return null;
 }
 
-export function nextAnimation(
-  type: AnimationType,
+export function animationUrlsForType(
+  animations: readonly PersonaAnimationSettings[],
+  type: PlayableAnimationType,
+): string[] {
+  return animations
+    .filter((animation) => animation.animation_type === type)
+    .flatMap((animation) => animation.asset_urls);
+}
+
+export function randomAnimationUrl(
+  choices: readonly string[],
   previous: string | null = null,
-): string {
-  const choices = ANIMATION_MAP[type];
-  const previousIndex = previous == null ? -1 : choices.indexOf(previous);
-  return choices[(previousIndex + 1) % choices.length]!;
+  random: () => number = Math.random,
+): string | null {
+  if (choices.length === 0) return null;
+  const candidates =
+    choices.length > 1 && previous != null
+      ? choices.filter((choice) => choice !== previous)
+      : choices;
+  const randomIndex = Math.min(
+    candidates.length - 1,
+    Math.floor(Math.max(0, random()) * candidates.length),
+  );
+  return candidates[randomIndex] ?? null;
 }

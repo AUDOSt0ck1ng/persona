@@ -1,14 +1,19 @@
-import type { AnimationType } from './animation-catalog';
+import type {
+  AnimationType,
+  PlayableAnimationType,
+} from './animation-catalog';
 
 export interface BodyAnimationOverride {
-  animation: AnimationType;
+  animation: PlayableAnimationType;
+  animationName?: string;
+  animationUrls?: string[];
   requestId: number;
 }
 
 export function resolveBodyAnimation(
   voiceAnimation: AnimationType,
   override: BodyAnimationOverride | null,
-): AnimationType {
+): PlayableAnimationType {
   return override?.animation ?? voiceAnimation;
 }
 

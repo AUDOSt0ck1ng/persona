@@ -30,3 +30,9 @@ test("allows the bundled reflection environment to load through a data fetch", (
   assert.ok(connectSource, "Content Security Policy must define connect-src");
   assert.match(connectSource, /(?:^|\s)data:(?:\s|$)/);
 });
+
+test("allows only Persona's local asset protocol for imported character media", () => {
+  const connectSource = getConnectSource();
+  assert.ok(connectSource, "Content Security Policy must define connect-src");
+  assert.match(connectSource, /(?:^|\s)persona-asset:(?:\s|$)/);
+});

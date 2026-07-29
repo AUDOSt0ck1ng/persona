@@ -10,11 +10,19 @@ const {
 
 test("findHyprlandClient matches the app class and process", () => {
   const clients = [
-    { class: "persona", pid: 42, address: "0xabc" },
-    { class: "persona", pid: 77, address: "0xdef" },
+    {
+      class: "persona",
+      pid: 42,
+      address: "0xabc",
+      title: "Persona Settings",
+      initialTitle: "Persona",
+    },
+    { class: "persona", pid: 42, address: "0xavatar", title: "Persona" },
+    { class: "persona", pid: 77, address: "0xdef", title: "Persona" },
   ];
 
   assert.equal(findHyprlandClient(clients, 77)?.address, "0xdef");
+  assert.equal(findHyprlandClient(clients, 42)?.address, "0xavatar");
   assert.equal(findHyprlandClient(clients, 99), undefined);
 });
 

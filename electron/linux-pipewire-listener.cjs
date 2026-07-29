@@ -217,6 +217,7 @@ class LinuxPipeWireListener {
         maxBuffer: 8 * 1024 * 1024,
         timeout: 2_500,
       });
+      if (this.stopped) return;
       const nodes = enrichPipeWireNodes(JSON.parse(stdout));
       if (this.onDebug) {
         const outputNodes = nodes

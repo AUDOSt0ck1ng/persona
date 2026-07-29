@@ -7,7 +7,10 @@ import {
 } from '@pixiv/three-vrm-animation';
 import type { VRM } from '@pixiv/three-vrm';
 import * as THREE from 'three';
-import { nextAnimation, type AnimationType } from '../animation-catalog';
+import {
+  randomAnimationUrl,
+  type PlayableAnimationType,
+} from '../animation-catalog';
 import {
   configureAnimationAction,
   crossFadeAnimationActions,
@@ -15,6 +18,7 @@ import {
 } from '../animation-action';
 
 interface PlayOptions {
+  animationUrls?: readonly string[];
   onComplete?: () => void;
   playback?: AnimationPlayback;
 }
@@ -25,7 +29,10 @@ interface PendingCompletion {
   generation: number;
 }
 
-function transitionSeconds(previous: AnimationType | null, next: AnimationType): number {
+function transitionSeconds(
+  previous: PlayableAnimationType | null,
+  next: PlayableAnimationType,
+): number {
   if (previous === 'TALK' && next === 'IDLE') return 1.15;
   if (next === 'TALK') return 0.85;
   return 0.7;
@@ -34,9 +41,11 @@ function transitionSeconds(previous: AnimationType | null, next: AnimationType):
 export function useVrmAnimation(vrm: VRM | null) {
   const mixer = useRef<THREE.AnimationMixer | null>(null);
   const current = useRef<THREE.AnimationAction | null>(null);
-  const currentType = useRef<AnimationType | null>(null);
+  const currentType = useRef<PlayableAnimationType | null>(null);
   const cache = useRef(new Map<string, VRMAnimation>());
-  const previousAnimation = useRef(new Map<AnimationType, string>());
+  const previousAnimation = useRef(
+    new Map<PlayableAnimationType, string>(),
+  );
   const requestGeneration = useRef(0);
   const pendingCompletion = useRef<PendingCompletion | null>(null);
 
@@ -68,22 +77,26 @@ export function useVrmAnimation(vrm: VRM | null) {
     };
   }, [vrm]);
 
-  const load = useCallback(async (path: string) => {
-    const cached = cache.current.get(path);
+  const load = useCallback(async (url: string) => {
+    const cached = cache.current.get(url);
     if (cached) return cached;
     const loader = new GLTFLoader();
     loader.register((parser) => new VRMAnimationLoaderPlugin(parser));
-    const gltf = await loader.loadAsync(`./assets/animations/${path}`);
+    const gltf = await loader.loadAsync(url);
     const animation = gltf.userData.vrmAnimations?.[0] as VRMAnimation | undefined;
-    if (!animation) throw new Error(`No VRM animation found in ${path}`);
-    cache.current.set(path, animation);
+    if (!animation) throw new Error(`No VRM animation found in ${url}`);
+    cache.current.set(url, animation);
     return animation;
   }, []);
 
   const play = useCallback(
     async (
-      type: AnimationType,
-      { onComplete, playback = 'loop' }: PlayOptions = {},
+      type: PlayableAnimationType,
+      {
+        animationUrls = [],
+        onComplete,
+        playback = 'loop',
+      }: PlayOptions = {},
     ) => {
       if (!vrm || !mixer.current) {
         if (playback === 'once') onComplete?.();
@@ -92,12 +105,20 @@ export function useVrmAnimation(vrm: VRM | null) {
       const generation = ++requestGeneration.current;
       pendingCompletion.current = null;
       try {
-        const path = nextAnimation(
-          type,
+        const url = randomAnimationUrl(
+          animationUrls,
           previousAnimation.current.get(type) ?? null,
         );
-        previousAnimation.current.set(type, path);
-        const animation = await load(path);
+        if (!url) {
+          const fadeSeconds = transitionSeconds(currentType.current, type);
+          current.current?.fadeOut(fadeSeconds);
+          current.current = null;
+          currentType.current = type;
+          if (playback === 'once') onComplete?.();
+          return;
+        }
+        previousAnimation.current.set(type, url);
+        const animation = await load(url);
         if (generation !== requestGeneration.current || !mixer.current) return;
         const action = mixer.current.clipAction(createVRMAnimationClip(animation, vrm));
         const fadeSeconds = transitionSeconds(currentType.current, type);

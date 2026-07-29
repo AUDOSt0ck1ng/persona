@@ -1,5 +1,7 @@
 "use strict";
 
+const { ANIMATION_NAME_PATTERN } = require("./library-catalog.cjs");
+
 function voiceState(activity, phase = "active") {
   return {
     type: "state",
@@ -40,18 +42,13 @@ function parseProtocolUrl(rawUrl, protocolScheme = "persona") {
     if (action === "inactive" || action === "stop") {
       return [{ type: "event", event: voiceState("idle", "inactive") }];
     }
-    const animation = {
-      idle: "IDLE",
-      greeting: "GREETING",
-      happy: "HAPPY",
-      "finger-gun": "FINGER_GUN",
-      dance: "DANCE",
-    }[action];
-    if (animation) {
+    if (action === "animation") {
+      const animationName = url.searchParams.get("name")?.trim() ?? "";
+      if (!ANIMATION_NAME_PATTERN.test(animationName)) return null;
       return [
         {
-          type: "event",
-          event: { type: "animation", animation },
+          type: "animation-command",
+          animationName,
         },
       ];
     }
