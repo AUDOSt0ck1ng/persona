@@ -134,6 +134,7 @@ interface Window {
     setDefaultModel(modelId: string): Promise<PersonaSettingsSnapshot>;
     setCharacterSize(size: number): Promise<PersonaSettingsSnapshot>;
     getMcpStatus(): Promise<PersonaMcpStatus>;
+    setWindowTheme(theme: 'light' | 'dark'): void;
     subscribe(
       listener: (snapshot: PersonaSettingsSnapshot) => void,
     ): () => void;

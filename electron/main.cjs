@@ -11,6 +11,7 @@ const {
   Menu,
   net,
   nativeImage,
+  nativeTheme,
   protocol,
   screen,
   Tray,
@@ -29,11 +30,20 @@ const { createAudioListener } = require("./audio-listener.cjs");
 const { isAllowedRendererNavigation } = require("./navigation-policy.cjs");
 const { snapshotHasConfiguredModel } = require("./model-readiness.cjs");
 const { parseProtocolUrl, voiceState } = require("./protocol-actions.cjs");
+const {
+  createSettingsWindowPresentationGate,
+} = require("./settings-window-presentation.cjs");
 
 const WINDOW_WIDTH = 430;
 const WINDOW_HEIGHT = 680;
 const SETTINGS_WINDOW_WIDTH = 1180;
 const SETTINGS_WINDOW_HEIGHT = 780;
+// Chromium paints this behind newly exposed areas during a resize, so it must
+// track the renderer's --bg-window token in src/styles.css.
+const SETTINGS_WINDOW_BACKGROUND = {
+  dark: "#0d0e12",
+  light: "#e6e8ec",
+};
 const PERSONA_ASSET_SCHEME = "persona-asset";
 const startInBackground = process.argv.includes("--background");
 const startInSettings = process.argv.includes("--settings");
@@ -42,6 +52,7 @@ const debugEnabled = process.env.PERSONA_DEBUG === "1";
 
 let avatarWindow = null;
 let settingsWindow = null;
+let settingsWindowPresentationGate = null;
 let settingsStore = null;
 let bridge = null;
 let mcpHandler = null;
@@ -288,17 +299,25 @@ function createWindow() {
   return window;
 }
 
+function settingsWindowBackground(theme) {
+  return SETTINGS_WINDOW_BACKGROUND[theme] ?? SETTINGS_WINDOW_BACKGROUND.dark;
+}
+
 function createSettingsWindow() {
   if (settingsWindow && !settingsWindow.isDestroyed()) return settingsWindow;
 
-  settingsWindow = new BrowserWindow({
+  const window = new BrowserWindow({
     width: SETTINGS_WINDOW_WIDTH,
     height: SETTINGS_WINDOW_HEIGHT,
     minWidth: 920,
     minHeight: 640,
     show: false,
     title: "Persona Settings",
-    backgroundColor: "#0b0c10",
+    // Best guess until the renderer reports the theme it actually resolved,
+    // which it does before the window is shown on ready-to-show.
+    backgroundColor: settingsWindowBackground(
+      nativeTheme.shouldUseDarkColors ? "dark" : "light",
+    ),
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
@@ -307,15 +326,28 @@ function createSettingsWindow() {
       sandbox: true,
     },
   });
+  const presentationGate = createSettingsWindowPresentationGate();
+  settingsWindow = window;
+  settingsWindowPresentationGate = presentationGate;
 
   const settingsRendererUrl = rendererUrl("settings");
-  secureRendererWindow(settingsWindow, settingsRendererUrl);
-  settingsWindow.once("ready-to-show", () => settingsWindow?.show());
-  settingsWindow.on("closed", () => {
-    settingsWindow = null;
+  secureRendererWindow(window, settingsRendererUrl);
+  window.once("ready-to-show", () => {
+    if (
+      settingsWindow !== window ||
+      settingsWindowPresentationGate !== presentationGate
+    ) {
+      return;
+    }
+    if (presentationGate.markReadyToShow()) focusSettingsWindow();
   });
-  void settingsWindow.loadURL(settingsRendererUrl);
-  return settingsWindow;
+  window.on("closed", () => {
+    if (settingsWindow !== window) return;
+    settingsWindow = null;
+    settingsWindowPresentationGate = null;
+  });
+  void window.loadURL(settingsRendererUrl);
+  return window;
 }
 
 function focusSettingsWindow() {
@@ -330,7 +362,9 @@ function focusSettingsWindow() {
 
 function showSettings() {
   const window = createSettingsWindow();
-  focusSettingsWindow();
+  if (settingsWindowPresentationGate?.requestShow()) {
+    focusSettingsWindow();
+  }
   return window;
 }
 
@@ -690,6 +724,20 @@ if (!app.requestSingleInstanceLock()) {
       }),
     );
     ipcMain.on("persona:hide", () => void hideOverlay());
+    // The resolved theme lives in renderer storage, so the window chrome can
+    // only be corrected once the settings renderer reports it. Accepts the two
+    // known theme names and never a caller-supplied colour.
+    ipcMain.on("persona:settings-set-window-theme", (event, theme) => {
+      if (theme !== "dark" && theme !== "light") return;
+      if (!settingsWindow || settingsWindow.isDestroyed()) return;
+      if (event.sender !== settingsWindow.webContents) return;
+      const background = settingsWindowBackground(theme);
+      settingsWindow.setBackgroundColor(background);
+      debugLog("settings window background", theme, background);
+      if (settingsWindowPresentationGate?.markThemeApplied()) {
+        focusSettingsWindow();
+      }
+    });
 
     mcpHandler = createPersonaMcpHandler({
       onAnimation: playConfiguredAnimation,
