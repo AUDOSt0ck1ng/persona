@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from 'react';
 import { Scene } from './Scene';
 import {
@@ -14,6 +15,14 @@ import {
   loadPackagedSettingsFallback,
   SETTINGS_FALLBACK,
 } from '../settings-defaults';
+import {
+  applyTheme,
+  LIGHT_QUERY,
+  readStoredTheme,
+  storeTheme,
+  THEME_OPTIONS,
+  type ThemePreference,
+} from '../theme';
 
 type SettingsSection = 'models' | 'animations' | 'appearance' | 'mcp';
 interface ConfirmationRequest {
@@ -34,12 +43,77 @@ const SECTIONS: Array<{
   { id: 'mcp', label: 'MCP', description: 'Agent connection' },
 ];
 
-const SECTION_GLYPHS: Record<SettingsSection, string> = {
-  models: '◫',
-  animations: '✦',
-  appearance: '⌁',
-  mcp: '⬡',
+function Icon({ children }: { children: ReactNode }) {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      focusable="false"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.4"
+      viewBox="0 0 16 16"
+    >
+      {children}
+    </svg>
+  );
+}
+
+const SECTION_ICONS: Record<SettingsSection, ReactNode> = {
+  models: (
+    <Icon>
+      <circle cx="8" cy="5.5" r="2.6" />
+      <path d="M2.9 13.6c0-2.3 2.28-4.1 5.1-4.1s5.1 1.8 5.1 4.1" />
+    </Icon>
+  ),
+  animations: (
+    <Icon>
+      <circle cx="8" cy="8" r="5.6" />
+      <path d="M6.8 5.8 10.9 8l-4.1 2.2z" />
+    </Icon>
+  ),
+  appearance: (
+    <Icon>
+      <path d="M2.6 5.6v-2a1 1 0 0 1 1-1h2M10.4 2.6h2a1 1 0 0 1 1 1v2M13.4 10.4v2a1 1 0 0 1-1 1h-2M5.6 13.4h-2a1 1 0 0 1-1-1v-2" />
+    </Icon>
+  ),
+  mcp: (
+    <Icon>
+      <path d="M6 2.4v2.6M10 2.4v2.6M4.6 5h6.8v2.9A3.4 3.4 0 0 1 8 11.3 3.4 3.4 0 0 1 4.6 7.9z" />
+      <path d="M8 11.3v2.3" />
+    </Icon>
+  ),
 };
+
+/** Tracks the stored preference and keeps the applied theme in sync with it. */
+function useThemePreference() {
+  const [preference, setPreference] =
+    useState<ThemePreference>(readStoredTheme);
+  const [systemPrefersLight, setSystemPrefersLight] = useState(
+    () => window.matchMedia(LIGHT_QUERY).matches,
+  );
+
+  useEffect(() => {
+    const query = window.matchMedia(LIGHT_QUERY);
+    const sync = (event: MediaQueryListEvent) =>
+      setSystemPrefersLight(event.matches);
+    query.addEventListener('change', sync);
+    return () => query.removeEventListener('change', sync);
+  }, []);
+
+  const resolved =
+    preference === 'system' ? (systemPrefersLight ? 'light' : 'dark') : preference;
+
+  useEffect(() => applyTheme(resolved), [resolved]);
+
+  const chooseTheme = useCallback((next: ThemePreference) => {
+    setPreference(next);
+    storeTheme(next);
+  }, []);
+
+  return { chooseTheme, preference, resolved };
+}
 
 const MCP_TOOL_DESCRIPTIONS: Record<string, string> = {
   play_animation: 'Play any configured action with at least one animation clip.',
@@ -55,6 +129,7 @@ function errorMessage(error: unknown): string {
 
 export function SettingsPage() {
   const bridge = window.personaSettings;
+  const { chooseTheme, preference: themePreference } = useThemePreference();
   const [previewCollapsed, setPreviewCollapsed] = useState(false);
   const [settings, setSettings] =
     useState<PersonaSettingsSnapshot>(SETTINGS_FALLBACK);
@@ -512,7 +587,7 @@ export function SettingsPage() {
               title={item.label}
             >
               <span className="nav-glyph" aria-hidden="true">
-                {SECTION_GLYPHS[item.id]}
+                {SECTION_ICONS[item.id]}
               </span>
               <span className="settings-nav-copy">
                 <strong>{item.label}</strong>
@@ -1014,50 +1089,90 @@ export function SettingsPage() {
           )}
 
           {section === 'appearance' && (
-            <section className="settings-panel appearance-panel">
-              <div className="panel-heading">
-                <div>
-                  <h2>Default character size</h2>
-                  <p>
-                    Set how large Persona appears when a model is first framed.
-                    You can still zoom and pan the live avatar manually.
-                  </p>
+            <>
+              <section className="settings-panel theme-panel">
+                <div className="panel-heading">
+                  <div>
+                    <h2>Theme</h2>
+                    <p>
+                      Sets how this settings window looks. The character overlay
+                      stays transparent in every theme.
+                    </p>
+                  </div>
                 </div>
-                <strong className="size-value">
-                  {Math.round(settings.character_size * 100)}%
-                </strong>
-              </div>
-              <input
-                aria-label="Default character size"
-                className="size-slider"
-                max="1.6"
-                min="0.7"
-                onBlur={(event) =>
-                  void saveCharacterSize(Number(event.currentTarget.value))
-                }
-                onChange={(event) =>
-                  previewCharacterSize(Number(event.currentTarget.value))
-                }
-                onKeyUp={(event) => {
-                  if (event.key.startsWith('Arrow')) {
-                    void saveCharacterSize(
-                      Number(event.currentTarget.value),
-                    );
+                <div
+                  aria-label="Theme"
+                  className="theme-segmented"
+                  role="group"
+                >
+                  {THEME_OPTIONS.map((option) => (
+                    <button
+                      aria-pressed={themePreference === option.id}
+                      data-testid={`theme-${option.id}`}
+                      key={option.id}
+                      onClick={() => chooseTheme(option.id)}
+                      type="button"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="theme-swatch"
+                        data-theme-preview={option.id}
+                      />
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="theme-note">
+                  System follows your desktop appearance and updates when it
+                  changes.
+                </p>
+              </section>
+
+              <section className="settings-panel appearance-panel">
+                <div className="panel-heading">
+                  <div>
+                    <h2>Default character size</h2>
+                    <p>
+                      Set how large Persona appears when a model is first framed.
+                      You can still zoom and pan the live avatar manually.
+                    </p>
+                  </div>
+                  <strong className="size-value">
+                    {Math.round(settings.character_size * 100)}%
+                  </strong>
+                </div>
+                <input
+                  aria-label="Default character size"
+                  className="size-slider"
+                  max="1.6"
+                  min="0.7"
+                  onBlur={(event) =>
+                    void saveCharacterSize(Number(event.currentTarget.value))
                   }
-                }}
-                onPointerUp={(event) =>
-                  void saveCharacterSize(Number(event.currentTarget.value))
-                }
-                step="0.05"
-                type="range"
-                value={settings.character_size}
-              />
-              <div className="slider-labels">
-                <span>70%</span>
-                <span>Default</span>
-                <span>160%</span>
-              </div>
-            </section>
+                  onChange={(event) =>
+                    previewCharacterSize(Number(event.currentTarget.value))
+                  }
+                  onKeyUp={(event) => {
+                    if (event.key.startsWith('Arrow')) {
+                      void saveCharacterSize(
+                        Number(event.currentTarget.value),
+                      );
+                    }
+                  }}
+                  onPointerUp={(event) =>
+                    void saveCharacterSize(Number(event.currentTarget.value))
+                  }
+                  step="0.05"
+                  type="range"
+                  value={settings.character_size}
+                />
+                <div className="slider-labels">
+                  <span>70%</span>
+                  <span>Default</span>
+                  <span>160%</span>
+                </div>
+              </section>
+            </>
           )}
 
           {section === 'mcp' && (

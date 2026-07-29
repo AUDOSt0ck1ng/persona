@@ -76,6 +76,7 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
   await settings.setDefaultModel("model-id");
   await settings.setCharacterSize(1.2);
   await settings.getMcpStatus();
+  settings.setWindowTheme("light");
 
   assert.deepEqual(invocations, [
     ["persona:get-snapshot"],
@@ -111,7 +112,10 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
     ["persona:settings-set-character-size", 1.2],
     ["persona:settings-get-mcp-status"],
   ]);
-  assert.deepEqual(sent, [["persona:hide"]]);
+  assert.deepEqual(sent, [
+    ["persona:hide"],
+    ["persona:settings-set-window-theme", "light"],
+  ]);
 
   const snapshots = [];
   const unsubscribe = settings.subscribe((snapshot) => snapshots.push(snapshot));

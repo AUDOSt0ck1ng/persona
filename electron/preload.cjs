@@ -44,6 +44,8 @@ contextBridge.exposeInMainWorld("personaSettings", {
     ipcRenderer.invoke("persona:settings-set-character-size", size),
   getMcpStatus: () =>
     ipcRenderer.invoke("persona:settings-get-mcp-status"),
+  setWindowTheme: (theme) =>
+    ipcRenderer.send("persona:settings-set-window-theme", theme),
   subscribe: (listener) => {
     const handler = (_event, snapshot) => listener(snapshot);
     ipcRenderer.on("persona:settings-updated", handler);
