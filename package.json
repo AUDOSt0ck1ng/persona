@@ -97,14 +97,13 @@
       "dist/**/*",
       "electron/**/*.cjs",
       "!electron/**/*.test.cjs",
-      "build/icon.png",
       "LICENSE",
       "package.json"
     ],
     "linux": {
       "category": "Utility",
       "executableName": "persona",
-      "icon": "build/icon.png",
+      "icon": "public/assets/avatar.png",
       "syncDesktopName": true,
       "artifactName": "Persona-${version}-linux-${arch}.${ext}",
       "target": [
@@ -117,7 +116,7 @@
         "nsis"
       ],
       "artifactName": "Persona-${version}-windows-${arch}-setup.${ext}",
-      "icon": "build/icon.png",
+      "icon": "public/assets/avatar.png",
       "requestedExecutionLevel": "asInvoker",
       "signExts": [
         "persona-audio-listener.exe"
@@ -143,7 +142,7 @@
       ],
       "artifactName": "Persona-${version}-macos-${arch}.${ext}",
       "category": "public.app-category.utilities",
-      "icon": "build/icon.png",
+      "icon": "public/assets/avatar.png",
       "minimumSystemVersion": "14.2.0",
       "hardenedRuntime": true,
       "entitlements": "build/entitlements.mac.plist",

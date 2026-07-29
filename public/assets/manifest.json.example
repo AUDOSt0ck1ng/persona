@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "distributionAllowed": false,
+  "notice": "These paths describe local test media only. Complete the license and source fields before distributing any of these files.",
+  "assets": [
+    {
+      "path": "models/model.vrm",
+      "role": "model",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/idle.vrma",
+      "role": "animation",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/talk1.vrma",
+      "role": "animation",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/talk2.vrma",
+      "role": "animation",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/greeting.vrma",
+      "role": "animation",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/happy.vrma",
+      "role": "animation",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/finger-gun.vrma",
+      "role": "animation",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/dance.vrma",
+      "role": "animation",
+      "license": null,
+      "source": null
+    }
+  ]
+}

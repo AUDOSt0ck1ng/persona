@@ -2,32 +2,12 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const { readPackagedLibrary } = require("../electron/library-catalog.cjs");
 
 const PROJECT_ROOT = path.join(__dirname, "..");
 const ASSET_ROOT = path.join(PROJECT_ROOT, "public", "assets");
+const LIBRARY_PATH = path.join(ASSET_ROOT, "library.json");
 const MANIFEST_PATH = path.join(ASSET_ROOT, "manifest.json");
-const EXPECTED_ASSETS = [
-  "model.vrm",
-  "animations/idle.vrma",
-  "animations/talk1.vrma",
-  "animations/talk2.vrma",
-  "animations/talk3.vrma",
-  "animations/greeting.vrma",
-  "animations/happy.vrma",
-  "animations/finger-gun.vrma",
-  "animations/dance.vrma",
-];
-const EXPECTED_ASSET_ROLES = {
-  "model.vrm": "model",
-  "animations/idle.vrma": "idle",
-  "animations/talk1.vrma": "talk",
-  "animations/talk2.vrma": "talk",
-  "animations/talk3.vrma": "talk",
-  "animations/greeting.vrma": "greeting",
-  "animations/happy.vrma": "happy",
-  "animations/finger-gun.vrma": "finger-gun",
-  "animations/dance.vrma": "dance",
-};
 
 function listRuntimeAssets(directory = ASSET_ROOT, prefix = "") {
   if (!fs.existsSync(directory)) return [];
@@ -42,13 +22,43 @@ function listRuntimeAssets(directory = ASSET_ROOT, prefix = "") {
     .sort();
 }
 
+function readAssetContract(libraryPath = LIBRARY_PATH) {
+  const library = readPackagedLibrary(libraryPath);
+  const roles = new Map();
+  for (const model of library.models) {
+    if (roles.has(model.asset_path)) {
+      throw new Error(`Packaged asset path is declared more than once: ${model.asset_path}`);
+    }
+    roles.set(model.asset_path, "model");
+  }
+  for (const animation of library.animations) {
+    for (const assetPath of animation.asset_paths) {
+      if (roles.has(assetPath)) {
+        throw new Error(`Packaged asset path is declared more than once: ${assetPath}`);
+      }
+      roles.set(assetPath, "animation");
+    }
+  }
+  return {
+    paths: [...roles.keys()].sort(),
+    roles: Object.fromEntries(roles),
+  };
+}
+
 function validateAssets({
   release = false,
   assetRoot = ASSET_ROOT,
+  libraryPath = LIBRARY_PATH,
   manifestPath = MANIFEST_PATH,
 } = {}) {
   const errors = [];
+  let contract;
   let manifest;
+  try {
+    contract = readAssetContract(libraryPath);
+  } catch (error) {
+    return [`Cannot read assets/library.json: ${error.message}`];
+  }
   try {
     manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
   } catch (error) {
@@ -56,23 +66,30 @@ function validateAssets({
   }
 
   const manifestPaths = (manifest.assets ?? []).map((asset) => asset.path).sort();
-  const expected = [...EXPECTED_ASSETS].sort();
   const actual = listRuntimeAssets(assetRoot);
-  const mediaAbsent = actual.length === 0;
-  if (JSON.stringify(manifestPaths) !== JSON.stringify(expected)) {
-    errors.push("Asset manifest paths do not match Persona's stable asset contract.");
+  if (JSON.stringify(manifestPaths) !== JSON.stringify(contract.paths)) {
+    errors.push("Asset manifest paths do not match the packaged library.");
   }
   for (const asset of manifest.assets ?? []) {
-    if (EXPECTED_ASSET_ROLES[asset.path] !== asset.role) {
+    if (contract.roles[asset.path] !== asset.role) {
       errors.push(`Incorrect asset role for ${asset.path ?? "unknown asset"}.`);
     }
   }
-  if ((!mediaAbsent || release) && JSON.stringify(actual) !== JSON.stringify(expected)) {
-    errors.push("Runtime asset files do not match Persona's stable asset contract.");
+  const someDeclaredMediaPresent = contract.paths.some((assetPath) =>
+    actual.includes(assetPath),
+  );
+  if (
+    (release &&
+      JSON.stringify(actual) !== JSON.stringify(contract.paths)) ||
+    (!release &&
+      someDeclaredMediaPresent &&
+      contract.paths.some((assetPath) => !actual.includes(assetPath)))
+  ) {
+    errors.push("Runtime asset files do not match the packaged library.");
   }
 
-  if (!mediaAbsent || release) {
-    for (const relative of EXPECTED_ASSETS) {
+  if (someDeclaredMediaPresent || release) {
+    for (const relative of contract.paths) {
       const absolute = path.join(assetRoot, relative);
       if (!fs.existsSync(absolute) || fs.statSync(absolute).size === 0) {
         errors.push(`Missing or empty asset: ${relative}`);
@@ -118,8 +135,9 @@ if (require.main === module) {
 
 module.exports = {
   ASSET_ROOT,
-  EXPECTED_ASSET_ROLES,
-  EXPECTED_ASSETS,
+  LIBRARY_PATH,
+  MANIFEST_PATH,
   listRuntimeAssets,
+  readAssetContract,
   validateAssets,
 };

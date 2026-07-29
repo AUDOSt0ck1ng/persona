@@ -11,18 +11,13 @@ test("maps Persona URLs to lifecycle and clamped level events", () => {
   assert.equal(parseProtocolUrl("persona://inactive")[0].event.state.phase, "inactive");
 });
 
-test("maps window and animation URLs without accepting another scheme", () => {
+test("maps window and configured animation URLs without accepting another scheme", () => {
   assert.deepEqual(parseProtocolUrl("persona://toggle"), [{ type: "toggle" }]);
-  assert.deepEqual(parseProtocolUrl("persona://dance"), [
-    { type: "event", event: { type: "animation", animation: "DANCE" } },
+  assert.deepEqual(parseProtocolUrl("persona://animation?name=wave-hello"), [
+    { type: "animation-command", animationName: "wave-hello" },
   ]);
-  assert.deepEqual(parseProtocolUrl("persona://finger-gun"), [
-    { type: "event", event: { type: "animation", animation: "FINGER_GUN" } },
-  ]);
-  assert.deepEqual(parseProtocolUrl("persona://happy"), [
-    { type: "event", event: { type: "animation", animation: "HAPPY" } },
-  ]);
-  assert.equal(parseProtocolUrl("persona://celebrate"), null);
+  assert.equal(parseProtocolUrl("persona://animation?name=Wave%20Hello"), null);
+  assert.equal(parseProtocolUrl("persona://animation"), null);
   assert.equal(parseProtocolUrl("another-product://show"), null);
   assert.equal(parseProtocolUrl("not a URL"), null);
 });

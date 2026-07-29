@@ -23,9 +23,12 @@ Treat signed and notarized artifacts as the production release path.
 
 ## Before tagging
 
-1. Replace every local test character file.
-2. Complete `public/assets/manifest.json` and `ASSET_LICENSES.md`.
-3. Set `distributionAllowed` to `true`.
+1. Choose the packaged model and animation files.
+2. Declare every packaged item and its product metadata in
+   `public/assets/library.json`.
+3. Mirror every media path in `public/assets/manifest.json`, complete the
+   license records and `ASSET_LICENSES.md`, then set `distributionAllowed` to
+   `true`.
 4. Update `version` in `package.json` and `package-lock.json`.
 5. Add release notes to `CHANGELOG.md`.
 6. Run:
@@ -41,6 +44,9 @@ Treat signed and notarized artifacts as the production release path.
 7. Manually verify on Linux, Windows, macOS arm64, and macOS x64:
 
    - install and launch;
+   - an empty catalog opens Settings without creating an avatar window or
+     starting the listener;
+   - selecting the first model activates the avatar and listener;
    - first-run system audio permission where applicable;
    - supported voice process discovery;
    - idle, short pause, long pause, and resumed speech;
@@ -49,6 +55,12 @@ Treat signed and notarized artifacts as the production release path.
    - close hides without quitting;
    - ending voice leaves the window open;
    - tray show, hide, preview, and quit;
+   - packaged and user model selection;
+   - user model and action creation, multi-file VRMA import, preview,
+     persistence, clip deletion, and action deletion;
+   - permanent empty Idle and Speaking slots and numbered clip names;
+   - packaged action edit, removal, and reset without changing user uploads;
+   - random clip selection for voice-driven and MCP-triggered actions;
    - shortcut, URL protocol, zoom, orbit, and pan;
    - transparent background and always-on-top behavior; and
    - uninstall.

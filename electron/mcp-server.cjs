@@ -1,25 +1,24 @@
 "use strict";
 
+const { randomUUID } = require("node:crypto");
 const { McpServer } = require("@modelcontextprotocol/sdk/server/mcp.js");
 const {
   StreamableHTTPServerTransport,
 } = require("@modelcontextprotocol/sdk/server/streamableHttp.js");
+const {
+  isInitializeRequest,
+} = require("@modelcontextprotocol/sdk/types.js");
 const z = require("zod/v4");
 const { version } = require("../package.json");
+const {
+  ANIMATION_NAME_PATTERN,
+  describeAnimations,
+} = require("./library-catalog.cjs");
 
 const MCP_PATH = "/mcp";
-const ANIMATION_EVENT_NAMES = {
-  idle: "IDLE",
-  greeting: "GREETING",
-  talk: "TALK",
-  happy: "HAPPY",
-  "finger-gun": "FINGER_GUN",
-  dance: "DANCE",
-};
-const ANIMATION_NAMES = Object.keys(ANIMATION_EVENT_NAMES);
 const WINDOW_ACTIONS = ["show", "hide", "toggle"];
 const SERVER_INSTRUCTIONS =
-  "Persona controls the installed local desktop character. Use play_animation when the user asks for a visual reaction or it clearly supports their request. Use control_window to show, hide, or toggle Persona. Persona never speaks or plays audio. get_status is read-only.";
+  "Persona controls the installed local desktop character. Use play_animation when the user asks for a visual reaction or it clearly supports their request. Call list_animations when you need the current action catalog. Use control_window to show, hide, or toggle Persona. Persona never speaks or plays audio. get_status and list_animations are read-only.";
 
 function textResult(text) {
   return {
@@ -27,11 +26,33 @@ function textResult(text) {
   };
 }
 
-function getAnimationEventName(animation) {
-  return ANIMATION_EVENT_NAMES[animation] ?? null;
+function animationToolDescription(animations) {
+  return [
+    "Play one randomly selected clip from an installed character action. This shows Persona and temporarily takes priority over voice-driven body motion.",
+    "Playable actions:",
+    describeAnimations(animations),
+  ].join("\n");
 }
 
-function createPersonaMcpServer({ onAnimation, onWindowAction, getStatus }) {
+function animationInputSchema(animations) {
+  return z
+    .string()
+    .regex(
+      ANIMATION_NAME_PATTERN,
+      "Animation names use lowercase letters, numbers, and single hyphens.",
+    )
+    .describe(
+      `The installed character action to play.\n${describeAnimations(animations)}`,
+    );
+}
+
+function createPersonaMcpServer({
+  onAnimation,
+  onWindowAction,
+  getStatus,
+  getAnimations = () => [],
+}) {
+  const animations = getAnimations();
   const server = new McpServer(
     {
       name: "Persona",
@@ -42,16 +63,13 @@ function createPersonaMcpServer({ onAnimation, onWindowAction, getStatus }) {
     },
   );
 
-  server.registerTool(
+  const animationTool = server.registerTool(
     "play_animation",
     {
       title: "Play Persona animation",
-      description:
-        "Play one installed character animation once in the desktop window. This shows Persona and temporarily takes priority over voice-driven body motion.",
+      description: animationToolDescription(animations),
       inputSchema: {
-        animation: z
-          .enum(ANIMATION_NAMES)
-          .describe("The character animation to play."),
+        animation: animationInputSchema(animations),
       },
       annotations: {
         readOnlyHint: false,
@@ -61,9 +79,44 @@ function createPersonaMcpServer({ onAnimation, onWindowAction, getStatus }) {
       },
     },
     async ({ animation }) => {
-      await onAnimation(animation);
-      return textResult(`Persona is playing the ${animation} animation.`);
+      const installed = getAnimations().some(
+        (candidate) => candidate.animation_name === animation,
+      );
+      if (!installed) {
+        return {
+          ...textResult(
+            `The ${animation} action is not currently playable. Call list_animations for the latest action catalog.`,
+          ),
+          isError: true,
+        };
+      }
+      const played = await onAnimation(animation);
+      if (played === false) {
+        return {
+          ...textResult(
+            "Persona cannot play that action until a model and at least one clip are configured.",
+          ),
+          isError: true,
+        };
+      }
+      return textResult(`Persona is playing the ${animation} action.`);
     },
+  );
+
+  server.registerTool(
+    "list_animations",
+    {
+      title: "List Persona animations",
+      description:
+        "Read the current playable Persona action names, descriptions, and trigger scenarios. The result reflects Settings changes immediately.",
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async () => textResult(describeAnimations(getAnimations())),
   );
 
   server.registerTool(
@@ -104,20 +157,72 @@ function createPersonaMcpServer({ onAnimation, onWindowAction, getStatus }) {
     async () => textResult(JSON.stringify(await getStatus())),
   );
 
+  server.refreshAnimationCatalog = () => {
+    const currentAnimations = getAnimations();
+    animationTool.update({
+      description: animationToolDescription(currentAnimations),
+      paramsSchema: {
+        animation: animationInputSchema(currentAnimations),
+      },
+    });
+  };
+
   return server;
 }
 
 function createPersonaMcpHandler(controller) {
-  return async (request, response, parsedBody) => {
-    const server = createPersonaMcpServer(controller);
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined,
-      enableJsonResponse: true,
-    });
+  const sessions = new Map();
 
+  const handler = async (request, response, parsedBody) => {
+    const header = request.headers["mcp-session-id"];
+    const sessionId = Array.isArray(header) ? header[0] : header;
+    let session = sessionId ? sessions.get(sessionId) : null;
     try {
-      await server.connect(transport);
-      await transport.handleRequest(request, response, parsedBody);
+      if (
+        !session &&
+        !sessionId &&
+        request.method === "POST" &&
+        isInitializeRequest(parsedBody)
+      ) {
+        let transport;
+        const server = createPersonaMcpServer(controller);
+        transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: randomUUID,
+          enableJsonResponse: true,
+          onsessioninitialized: (initializedSessionId) => {
+            session = { server, transport };
+            sessions.set(initializedSessionId, session);
+          },
+        });
+        transport.onclose = () => {
+          const closedSessionId = transport.sessionId;
+          if (closedSessionId) sessions.delete(closedSessionId);
+        };
+        await server.connect(transport);
+        await transport.handleRequest(request, response, parsedBody);
+        return;
+      }
+
+      if (!session) {
+        response.writeHead(sessionId ? 404 : 400, {
+          "content-type": "application/json",
+        });
+        response.end(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            error: {
+              code: -32000,
+              message: sessionId
+                ? "MCP session not found"
+                : "MCP session ID is required",
+            },
+            id: null,
+          }),
+        );
+        return;
+      }
+
+      await session.transport.handleRequest(request, response, parsedBody);
     } catch (error) {
       if (!response.headersSent) {
         response.writeHead(500, { "content-type": "application/json" });
@@ -130,20 +235,30 @@ function createPersonaMcpHandler(controller) {
         );
       }
       throw error;
-    } finally {
-      await transport.close();
-      await server.close();
     }
   };
+
+  handler.notifyToolsChanged = () => {
+    for (const { server } of sessions.values()) {
+      server.refreshAnimationCatalog();
+    }
+  };
+
+  handler.close = async () => {
+    const activeSessions = [...sessions.values()];
+    sessions.clear();
+    await Promise.allSettled(
+      activeSessions.map(({ server }) => server.close()),
+    );
+  };
+
+  return handler;
 }
 
 module.exports = {
-  ANIMATION_EVENT_NAMES,
-  ANIMATION_NAMES,
   MCP_PATH,
   SERVER_INSTRUCTIONS,
   WINDOW_ACTIONS,
   createPersonaMcpHandler,
   createPersonaMcpServer,
-  getAnimationEventName,
 };

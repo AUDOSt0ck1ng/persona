@@ -30,18 +30,28 @@ Persona exposes these tools:
 
 | Tool | Input | Effect |
 | --- | --- | --- |
-| `play_animation` | `animation`: `idle`, `greeting`, `talk`, `happy`, `finger-gun`, or `dance` | Shows Persona and plays an installed animation once |
+| `play_animation` | `animation`: a playable configured action name | Shows Persona and plays one randomly selected clip from that action |
+| `list_animations` | None | Reads the latest playable action names, descriptions, and trigger scenarios |
 | `control_window` | `action`: `show`, `hide`, or `toggle` | Controls the Persona window without quitting the app |
-| `get_status` | None | Reads window visibility, voice state, and listener status |
+| `get_status` | None | Reads model readiness, window visibility, voice state, and listener status |
 
-The animation names are a stable product contract rather than file paths.
-Future character packs can replace the media behind those names without
-changing the MCP configuration or granting filesystem access.
+The animation descriptions are generated from Persona's playable actions.
+Empty actions are omitted until a VRMA clip is added. User uploads, user edits
+to packaged metadata, removals, and packaged-action resets are reflected
+immediately through an MCP tool-list change notification. The
+`play_animation` input remains open to valid action names and checks the live
+library when invoked, so a client that does not refresh tool descriptions can
+still run an action added during the current session. No media paths or
+filesystem access are exposed.
 
-An MCP-triggered animation temporarily takes priority over voice-driven body
-motion. Lip sync continues while the clip plays. A newer MCP animation replaces
-the current one; when the one-shot clip finishes, Persona returns to the current
-idle, listening, or speaking state.
+With no configured model, window and animation commands remain inactive.
+Persona can still report status while its Settings window is used for initial
+setup.
+
+An MCP-triggered action randomly selects one of its clips and temporarily takes
+priority over voice-driven body motion. Lip sync continues while the clip
+plays. A newer MCP action replaces the current one; when the one-shot clip
+finishes, Persona returns to the current idle, listening, or speaking state.
 
 The MCP endpoint uses the same port as the local HTTP API. If
 `PERSONA_BRIDGE_PORT` changes it, update the URL registered with Codex to match.
@@ -87,10 +97,7 @@ Installed packages register `persona://`.
 | `persona://thinking` | Settle the character while a response is prepared |
 | `persona://speaking?level=0.3` | Begin speaking and optionally set a level |
 | `persona://inactive` | End the voice state without hiding Persona |
-| `persona://greeting` | Preview the greeting motion |
-| `persona://happy` | Preview the happy motion |
-| `persona://finger-gun` | Preview the finger-gun motion |
-| `persona://dance` | Preview a dance motion |
+| `persona://animation?name=<animation-name>` | Play an active configured animation once |
 
 Open these URLs with `xdg-open` on Linux, `open` on macOS, or `start` on
 Windows.
@@ -128,17 +135,16 @@ Normalized level:
 }
 ```
 
-Animation preview:
+Configured animation action:
 
 ```json
 {
   "type": "animation",
-  "animation": "DANCE"
+  "animation_name": "example-animation"
 }
 ```
 
-Allowed animations are `IDLE`, `GREETING`, `TALK`, `HAPPY`, `FINGER_GUN`, and
-`DANCE`.
+The name must match a playable action in Persona's merged library.
 
 Send events:
 

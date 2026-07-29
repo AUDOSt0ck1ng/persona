@@ -6,11 +6,12 @@ const { promisify } = require("node:util");
 const execFileAsync = promisify(execFile);
 const WINDOW_CLASS = "persona";
 
-function findHyprlandClient(clients, pid) {
+function findHyprlandClient(clients, pid, title = "Persona") {
   return clients.find(
     (client) =>
       Number(client.pid) === Number(pid) &&
-      (client.class === WINDOW_CLASS || client.initialClass === WINDOW_CLASS),
+      (client.class === WINDOW_CLASS || client.initialClass === WINDOW_CLASS) &&
+      client.title === title,
   );
 }
 
@@ -128,6 +129,7 @@ async function runLegacyCommands(
 
 async function configureHyprlandWindow({
   pid,
+  title = "Persona",
   width = 430,
   height = 680,
   margin = 24,
@@ -142,7 +144,7 @@ async function configureHyprlandWindow({
       runHyprctlJson("clients"),
       runHyprctlJson("monitors"),
     ]);
-    const client = findHyprlandClient(clients, pid);
+    const client = findHyprlandClient(clients, pid, title);
     if (!client) return false;
     const monitor =
       monitors.find((candidate) => Number(candidate.id) === Number(client.monitor)) || monitors[0];
@@ -174,10 +176,14 @@ async function configureHyprlandWindow({
   }
 }
 
-async function getHyprlandWindowPlacement(pid) {
+async function getHyprlandWindowPlacement(pid, title = "Persona") {
   if (process.platform !== "linux") return null;
   try {
-    const client = findHyprlandClient(await runHyprctlJson("clients"), pid);
+    const client = findHyprlandClient(
+      await runHyprctlJson("clients"),
+      pid,
+      title,
+    );
     if (!client?.at || !client?.size) return null;
     return {
       x: Number(client.at[0]),

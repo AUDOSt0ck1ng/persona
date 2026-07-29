@@ -1,11 +1,24 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import { Scene } from './components/Scene';
-import type { AnimationType } from './animation-catalog';
+import {
+  animationUrlsForType,
+  immediateVoiceAnimation,
+  type AnimationType,
+} from './animation-catalog';
 import {
   finishBodyAnimationOverride,
   resolveBodyAnimation,
   type BodyAnimationOverride,
 } from './animation-priority';
+import {
+  loadPackagedSettingsFallback,
+  SETTINGS_FALLBACK,
+} from './settings-defaults';
 
 const INITIAL_STATE: VoiceState = {
   activity: 'idle',
@@ -22,9 +35,8 @@ export function App() {
   const [voiceAnimation, setVoiceAnimation] = useState<AnimationType>('IDLE');
   const [bodyOverride, setBodyOverride] =
     useState<BodyAnimationOverride | null>(null);
-  const [talkTurn, setTalkTurn] = useState(0);
-  const previousPhase = useRef<VoicePhase>('inactive');
-  const previousSpeaking = useRef(false);
+  const [settings, setSettings] =
+    useState<PersonaSettingsSnapshot>(SETTINGS_FALLBACK);
 
   useEffect(() => {
     const bridge = window.personaBridge;
@@ -38,16 +50,28 @@ export function App() {
       } else if (event.type === 'audio-level') {
         setAudioLevel(event.level);
       } else if (event.type === 'animation') {
-        if (event.source === 'mcp' && event.requestId != null) {
+        if (event.requestId != null) {
           setBodyOverride({
             animation: event.animation,
+            animationName: event.animationName,
+            animationUrls: event.animationUrls,
             requestId: event.requestId,
           });
-        } else {
+        } else if (event.animation !== 'CUSTOM') {
           setVoiceAnimation(event.animation);
         }
       }
     });
+  }, []);
+
+  useEffect(() => {
+    const settingsBridge = window.personaSettings;
+    if (!settingsBridge) {
+      void loadPackagedSettingsFallback().then(setSettings);
+      return;
+    }
+    void settingsBridge.get().then(setSettings);
+    return settingsBridge.subscribe(setSettings);
   }, []);
 
   const speaking =
@@ -56,29 +80,10 @@ export function App() {
     !voice.outputMuted;
 
   useEffect(() => {
-    const startedSpeaking = speaking && !previousSpeaking.current;
-    previousSpeaking.current = speaking;
-    if (startedSpeaking) setTalkTurn((turn) => turn + 1);
-
-    if (voice.phase === 'active' && previousPhase.current !== 'active') {
-      setVoiceAnimation('GREETING');
-      const timer = window.setTimeout(
-        () => setVoiceAnimation(voice.activity === 'speaking' ? 'TALK' : 'IDLE'),
-        2600,
-      );
-      previousPhase.current = voice.phase;
-      return () => window.clearTimeout(timer);
-    }
-    previousPhase.current = voice.phase;
-
-    if (voice.phase !== 'active' || voice.outputMuted) {
-      setVoiceAnimation('IDLE');
-      setAudioLevel(0);
-      return;
-    }
-
-    if (voice.activity === 'speaking' && !voice.outputMuted) {
-      setVoiceAnimation('TALK');
+    const immediateAnimation = immediateVoiceAnimation(voice);
+    if (immediateAnimation != null) {
+      setVoiceAnimation(immediateAnimation);
+      if (immediateAnimation === 'IDLE') setAudioLevel(0);
       return;
     }
 
@@ -87,11 +92,22 @@ export function App() {
       BODY_IDLE_DELAY_MS,
     );
     return () => window.clearTimeout(timer);
-  }, [speaking, voice.activity, voice.outputMuted, voice.phase]);
+  }, [voice]);
 
   const animation = resolveBodyAnimation(voiceAnimation, bodyOverride);
-  const animationRequest =
-    bodyOverride?.requestId ?? (animation === 'TALK' ? talkTurn : 0);
+  const defaultModel =
+    settings.default_model_id == null
+      ? undefined
+      : settings.models.find(
+          (model) => model.id === settings.default_model_id,
+        );
+  const animationRequest = bodyOverride?.requestId ?? 0;
+  const configuredAnimationUrls = useMemo(
+    () => animationUrlsForType(settings.animations, animation),
+    [animation, settings.animations],
+  );
+  const animationUrls =
+    bodyOverride?.animationUrls ?? configuredAnimationUrls;
   const overrideRequestId = bodyOverride?.requestId ?? null;
   const handleAnimationComplete = useCallback(() => {
     if (overrideRequestId == null) return;
@@ -100,16 +116,21 @@ export function App() {
     );
   }, [overrideRequestId]);
 
-  return (
+  return defaultModel ? (
     <main className="app">
       <Scene
         animation={animation}
         animationRequest={animationRequest}
+        animationUrls={animationUrls}
         audioLevel={audioLevel}
+        characterSize={settings.character_size}
+        modelUrl={defaultModel.asset_url}
         onAnimationComplete={handleAnimationComplete}
         playback={bodyOverride ? 'once' : 'loop'}
         speaking={speaking}
       />
     </main>
+  ) : (
+    <main className="app" />
   );
 }

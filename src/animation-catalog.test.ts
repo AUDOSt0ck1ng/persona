@@ -1,47 +1,70 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  ANIMATION_CATALOG,
-  ANIMATION_MAP,
-  nextAnimation,
-  randomAnimation,
+  animationUrlsForType,
+  immediateVoiceAnimation,
+  randomAnimationUrl,
 } from './animation-catalog';
 
 describe('Persona animation contract', () => {
-  it('uses every stable replacement slot exactly once in the catalog', () => {
-    expect(Object.values(ANIMATION_CATALOG).sort()).toEqual([
-      'dance.vrma',
-      'finger-gun.vrma',
-      'greeting.vrma',
-      'happy.vrma',
-      'idle.vrma',
+  it('enters speaking directly when voice is already active at startup', () => {
+    expect(
+      immediateVoiceAnimation({
+        activity: 'speaking',
+        outputMuted: false,
+        phase: 'active',
+      }),
+    ).toBe('TALK');
+    expect(
+      immediateVoiceAnimation({
+        activity: 'listening',
+        outputMuted: false,
+        phase: 'active',
+      }),
+    ).toBeNull();
+    expect(
+      immediateVoiceAnimation({
+        activity: 'speaking',
+        outputMuted: true,
+        phase: 'active',
+      }),
+    ).toBe('IDLE');
+  });
+
+  it('uses no clip for the empty idle pose when no asset is configured', () => {
+    expect(randomAnimationUrl([])).toBeNull();
+  });
+
+  it('chooses randomly while avoiding an immediate repeat', () => {
+    const choices = ['first.vrma', 'second.vrma', 'third.vrma'];
+    expect(randomAnimationUrl(choices, null, () => 0)).toBe('first.vrma');
+    expect(randomAnimationUrl(choices, 'first.vrma', () => 0)).toBe(
+      'second.vrma',
+    );
+    expect(randomAnimationUrl(choices, 'first.vrma', () => 0.99)).toBe(
+      'third.vrma',
+    );
+  });
+
+  it('combines every configured asset for the same live role', () => {
+    const animations = [
+      {
+        animation_type: 'TALK',
+        asset_urls: ['talk1.vrma'],
+      },
+      {
+        animation_type: 'IDLE',
+        asset_urls: ['idle.vrma'],
+      },
+      {
+        animation_type: 'TALK',
+        asset_urls: ['talk2.vrma', 'talk3.vrma'],
+      },
+    ] as PersonaAnimationSettings[];
+
+    expect(animationUrlsForType(animations, 'TALK')).toEqual([
       'talk1.vrma',
       'talk2.vrma',
       'talk3.vrma',
     ]);
-    expect(ANIMATION_MAP.IDLE).toEqual(['idle.vrma']);
-    expect(ANIMATION_MAP.TALK).toHaveLength(3);
-    expect(ANIMATION_MAP.HAPPY).toEqual(['happy.vrma']);
-    expect(ANIMATION_MAP.FINGER_GUN).toEqual(['finger-gun.vrma']);
-    expect(ANIMATION_MAP.DANCE).toEqual(['dance.vrma']);
-  });
-
-  it('can select the last talking clip without escaping that category', () => {
-    vi.spyOn(Math, 'random').mockReturnValue(0.999);
-    expect(randomAnimation('TALK')).toBe('talk3.vrma');
-    vi.restoreAllMocks();
-  });
-
-  it('cycles through every talking clip without consecutive repeats', () => {
-    const first = nextAnimation('TALK');
-    const second = nextAnimation('TALK', first);
-    const third = nextAnimation('TALK', second);
-    const wrapped = nextAnimation('TALK', third);
-
-    expect([first, second, third]).toEqual([
-      'talk1.vrma',
-      'talk2.vrma',
-      'talk3.vrma',
-    ]);
-    expect(wrapped).toBe(first);
   });
 });

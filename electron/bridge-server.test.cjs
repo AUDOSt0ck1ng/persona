@@ -37,7 +37,7 @@ function requestServer(address, { path, method = "GET", headers = {}, body = "" 
   });
 }
 
-test("normalizes state and clamps audio level events", () => {
+test("normalizes voice events and configured animation commands", () => {
   const state = {
     activity: "speaking",
     microphoneMuted: false,
@@ -49,20 +49,25 @@ test("normalizes state and clamps audio level events", () => {
     type: "audio-level",
     level: 1,
   });
-  assert.deepEqual(normalizeEvent({ type: "animation", animation: "DANCE" }), {
-    type: "animation",
-    animation: "DANCE",
-  });
-  assert.deepEqual(normalizeEvent({ type: "animation", animation: "HAPPY" }), {
-    type: "animation",
-    animation: "HAPPY",
-  });
-  assert.deepEqual(normalizeEvent({ type: "animation", animation: "FINGER_GUN" }), {
-    type: "animation",
-    animation: "FINGER_GUN",
-  });
-  assert.equal(normalizeEvent({ type: "animation", animation: "CELEBRATE" }), null);
-  assert.equal(normalizeEvent({ type: "animation", animation: "UNKNOWN" }), null);
+  assert.deepEqual(
+    normalizeEvent({ type: "animation", animation_name: "wave-hello" }),
+    {
+      type: "animation-command",
+      animationName: "wave-hello",
+    },
+  );
+  assert.equal(
+    normalizeEvent({ type: "animation", animation_name: "Wave Hello" }),
+    null,
+  );
+  assert.equal(
+    normalizeEvent({ type: "animation", animation_name: "unknown/name" }),
+    null,
+  );
+  assert.equal(
+    normalizeEvent({ type: "animation", animation: "LEGACY_VALUE" }),
+    null,
+  );
   assert.equal(normalizeEvent({ type: "state", state: { phase: "wat" } }), null);
 });
 
@@ -128,13 +133,54 @@ test("bridge accepts a valid native adapter state event", async (context) => {
   assert.equal(events[0].state.phase, "active");
 });
 
+test("bridge delegates configured animation names to the active library", async (context) => {
+  const events = [];
+  const bridge = createBridgeServer({
+    port: 0,
+    onEvent: (event) => {
+      events.push(event);
+      return event.animationName === "installed-motion";
+    },
+  });
+  const address = await bridge.listen();
+  context.after(() => bridge.close());
+
+  const acceptedBody = JSON.stringify({
+    type: "animation",
+    animation_name: "installed-motion",
+  });
+  const rejectedBody = JSON.stringify({
+    type: "animation",
+    animation_name: "uninstalled-motion",
+  });
+  const accepted = await requestServer(address, {
+    path: "/events",
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: acceptedBody,
+  });
+  const rejected = await requestServer(address, {
+    path: "/events",
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: rejectedBody,
+  });
+
+  assert.equal(accepted.status, 202);
+  assert.equal(rejected.status, 422);
+  assert.deepEqual(events, [
+    { type: "animation-command", animationName: "installed-motion" },
+    { type: "animation-command", animationName: "uninstalled-motion" },
+  ]);
+});
+
 test("bridge routes only valid local JSON requests to MCP", async (context) => {
   const bodies = [];
   const bridge = createBridgeServer({
     port: 0,
     onEvent: () => {},
-    mcpHandler: (_request, response, body) => {
-      bodies.push(body);
+    mcpHandler: (request, response, body) => {
+      bodies.push({ body, method: request.method });
       response.writeHead(200, { "content-type": "application/json" });
       response.end('{"ok":true}');
     },
@@ -148,6 +194,13 @@ test("bridge routes only valid local JSON requests to MCP", async (context) => {
     headers: { "content-type": "application/json" },
     body: '{"jsonrpc":"2.0"}',
   });
+  const acceptedGet = await requestServer(address, {
+    path: "/mcp",
+  });
+  const acceptedDelete = await requestServer(address, {
+    path: "/mcp",
+    method: "DELETE",
+  });
   const blockedOrigin = await requestServer(address, {
     path: "/mcp",
     method: "POST",
@@ -159,6 +212,7 @@ test("bridge routes only valid local JSON requests to MCP", async (context) => {
   });
   const unsupportedMethod = await requestServer(address, {
     path: "/mcp",
+    method: "PUT",
   });
   const invalidJson = await requestServer(address, {
     path: "/mcp",
@@ -174,11 +228,17 @@ test("bridge routes only valid local JSON requests to MCP", async (context) => {
   });
 
   assert.equal(accepted.status, 200);
+  assert.equal(acceptedGet.status, 200);
+  assert.equal(acceptedDelete.status, 200);
   assert.equal(blockedOrigin.status, 403);
   assert.equal(unsupportedMethod.status, 405);
-  assert.equal(unsupportedMethod.headers.allow, "POST");
+  assert.equal(unsupportedMethod.headers.allow, "POST, GET, DELETE");
   assert.equal(invalidJson.status, 400);
   assert.equal(JSON.parse(invalidJson.body).error.code, -32700);
   assert.equal(oversized.status, 413);
-  assert.deepEqual(bodies, [{ jsonrpc: "2.0" }]);
+  assert.deepEqual(bodies, [
+    { body: { jsonrpc: "2.0" }, method: "POST" },
+    { body: undefined, method: "GET" },
+    { body: undefined, method: "DELETE" },
+  ]);
 });

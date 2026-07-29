@@ -92,3 +92,27 @@ test("native listener activates on audio, smooths speech, and never hides the wi
   assert.deepEqual(sessions, [true, false]);
   listener.stop();
 });
+
+test("native listener cannot attach after it is stopped during discovery", async () => {
+  let finishDiscovery;
+  let spawnCount = 0;
+  const listener = new NativeProcessAudioListener({
+    platform: "darwin",
+    helperPath: __filename,
+    processDiscovery: () =>
+      new Promise((resolve) => {
+        finishDiscovery = resolve;
+      }),
+    spawnProcess: () => {
+      spawnCount += 1;
+      return fakeChild();
+    },
+  });
+
+  const starting = listener.start();
+  listener.stop();
+  finishDiscovery({ pids: [10], rootPids: [10] });
+  await starting;
+
+  assert.equal(spawnCount, 0);
+});

@@ -1,20 +1,13 @@
 "use strict";
 
 const http = require("node:http");
+const { ANIMATION_NAME_PATTERN } = require("./library-catalog.cjs");
 
 const DEFAULT_PORT = 47831;
 const MAX_BODY_BYTES = 64 * 1024;
 const TRUSTED_ORIGIN =
   /^(?:https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?|codex-app:\/\/[A-Za-z0-9._~-]*)$/i;
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
-const ANIMATIONS = new Set([
-  "IDLE",
-  "GREETING",
-  "TALK",
-  "HAPPY",
-  "FINGER_GUN",
-  "DANCE",
-]);
 
 function isVoiceState(value) {
   return (
@@ -37,8 +30,15 @@ function normalizeEvent(value) {
       value.bands != null && typeof value.bands === "object" ? value.bands : undefined;
     return { type: "audio-level", level, ...(bands ? { bands } : {}) };
   }
-  if (value?.type === "animation" && ANIMATIONS.has(value.animation)) {
-    return { type: "animation", animation: value.animation };
+  if (
+    value?.type === "animation" &&
+    typeof value.animation_name === "string" &&
+    ANIMATION_NAME_PATTERN.test(value.animation_name)
+  ) {
+    return {
+      type: "animation-command",
+      animationName: value.animation_name,
+    };
   }
   return null;
 }
@@ -130,8 +130,8 @@ function createBridgeServer({
         response.end();
         return;
       }
-      if (request.method !== "POST") {
-        response.writeHead(405, { allow: "POST" });
+      if (!["POST", "GET", "DELETE"].includes(request.method)) {
+        response.writeHead(405, { allow: "POST, GET, DELETE" });
         response.end();
         return;
       }
@@ -140,8 +140,12 @@ function createBridgeServer({
         response.end();
         return;
       }
-      void readJsonBody(request)
-        .then((body) => mcpHandler(request, response, body))
+      const body =
+        request.method === "POST"
+          ? readJsonBody(request)
+          : Promise.resolve(undefined);
+      void body
+        .then((parsedBody) => mcpHandler(request, response, parsedBody))
         .catch((error) => {
           if (response.headersSent) return;
           if (error?.code === "BODY_TOO_LARGE") {
@@ -181,7 +185,12 @@ function createBridgeServer({
           return;
         }
         if (event.type === "state") lastStateEvent = event;
-        onEvent(event);
+        const accepted = onEvent(event);
+        if (accepted === false) {
+          response.writeHead(422);
+          response.end();
+          return;
+        }
         response.writeHead(202, {
           ...(origin ? { "access-control-allow-origin": origin, vary: "Origin" } : {}),
           "content-type": "application/json",
@@ -213,7 +222,6 @@ function createBridgeServer({
 }
 
 module.exports = {
-  ANIMATIONS,
   DEFAULT_PORT,
   createBridgeServer,
   hostAllowed,

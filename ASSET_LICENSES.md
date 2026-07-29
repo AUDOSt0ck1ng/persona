@@ -22,10 +22,17 @@ verified redistribution license are development inputs only. Therefore:
 The automated release gate enforces the last two requirements, but repository
 authors remain responsible for not committing restricted files.
 
+`public/assets/library.json.example` and
+`public/assets/manifest.json.example` describe the current ignored local test
+files for development. They do not grant distribution rights; the example
+manifest intentionally leaves distribution disabled and license provenance
+incomplete.
+
 ## Replacing assets
 
-Use the exact filenames documented in the README so no code change is needed.
-Then edit `public/assets/manifest.json`:
+Declare the packaged media and its product metadata in
+`public/assets/library.json`. Then mirror every declared media path in
+`public/assets/manifest.json`:
 
 1. Set each asset's `license` to its SPDX identifier or clear license name.
 2. Set each asset's `source` to a public source or author-provided provenance.

@@ -2,9 +2,10 @@
 
 ## Reporting
 
-Before the public repository exists, report security issues privately to the
-maintainer. After `xikhar/persona` is created, use GitHub private vulnerability
-reporting rather than a public issue.
+Report security vulnerabilities through
+[GitHub private vulnerability reporting](https://github.com/xikhar/persona/security/advisories/new).
+Do not disclose a suspected vulnerability in a public issue, discussion, or
+pull request before it has been reviewed.
 
 ## Data boundary
 
@@ -15,8 +16,9 @@ over the network.
 The integration server binds only to `127.0.0.1`, rejects non-loopback `Host`
 headers, restricts browser origins, and limits request bodies. Its event API
 accepts only normalized state, level, and animation events. Its MCP API exposes
-only closed animation, window, and status schemas; it cannot execute commands
-or access arbitrary files.
+only bounded animation, window, and status operations. Animation names are
+validated against the current local catalog before playback. The server cannot
+execute commands or access arbitrary files.
 
 The loopback MCP endpoint does not require authentication, so other processes
 running on the same computer can invoke those visual controls. Tools that
@@ -26,6 +28,14 @@ separate authorization design.
 The renderer is sandboxed with context isolation and no Node.js integration. A
 restrictive content security policy is applied, renderer popups are denied, and
 navigation outside the local renderer entry is blocked.
+
+Imported VRM and VRMA files are copied into Persona's per-user application-data
+directory. They are available to the sandboxed renderer only through a local
+protocol that accepts IDs already recorded by Persona; arbitrary filesystem
+paths are rejected. Persona does not upload or expose custom media files.
+Configured action names, descriptions, and trigger scenarios are intentionally
+available to connected local MCP clients so they can discover and select
+animations.
 
 ## Supported versions
 
