@@ -183,6 +183,10 @@ npm run native:test
 The native listener is required before running Persona from source on macOS or
 Windows. Linux captures activity through PipeWire and does not build a helper.
 
+Contributions are welcome. Read the [contribution
+guidelines](CONTRIBUTING.md) and [Code of Conduct](CODE_OF_CONDUCT.md) before
+opening an issue or pull request.
+
 More detail:
 
 - [Architecture and development](docs/DEVELOPMENT.md)
