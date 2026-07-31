@@ -14,6 +14,7 @@ import {
 import {
   loadPackagedSettingsFallback,
   SETTINGS_FALLBACK,
+  resolveLightingSettings,
 } from '../settings-defaults';
 import {
   applyTheme,
@@ -25,6 +26,22 @@ import {
 } from '../theme';
 
 type SettingsSection = 'models' | 'animations' | 'appearance' | 'mcp';
+type LightingNumberField =
+  | 'exposure'
+  | 'environment_intensity'
+  | 'key_light_intensity'
+  | 'ambient_intensity';
+
+const LIGHTING_NUMBER_RANGES: Record<
+  LightingNumberField,
+  readonly [number, number]
+> = {
+  exposure: [0.1, 3],
+  environment_intensity: [0, 2],
+  key_light_intensity: [0, 4],
+  ambient_intensity: [0, 4],
+};
+
 interface ConfirmationRequest {
   confirmLabel: string;
   detail: string;
@@ -536,6 +553,93 @@ export function SettingsPage() {
     await run(
       () => bridge.setCharacterSize(size),
       `Default character size set to ${Math.round(size * 100)}%.`,
+    );
+  };
+
+  const previewLighting: PersonaLightingSettings = useMemo(() => {
+    return resolveLightingSettings(
+      selectedModel ? settings.model_lighting[selectedModel.id] : null,
+    );
+  }, [selectedModel, settings.model_lighting]);
+
+  const previewLightingField = <
+    Field extends keyof PersonaLightingSettings,
+  >(
+    field: Field,
+    value: PersonaLightingSettings[Field],
+  ) => {
+    if (!selectedModel) return;
+    setSettings((current) => ({
+      ...current,
+      model_lighting: {
+        ...current.model_lighting,
+        [selectedModel.id]: {
+          ...previewLighting,
+          [field]: value,
+        },
+      },
+    }));
+  };
+
+  const saveLightingField = async <
+    Field extends keyof PersonaLightingSettings,
+  >(
+    field: Field,
+    value: PersonaLightingSettings[Field],
+  ) => {
+    if (!bridge || !selectedModel) return;
+    const snapshot = await run(
+      () =>
+        bridge.setModelLighting(selectedModel.id, {
+          ...previewLighting,
+          [field]: value,
+        }),
+      'Lighting updated.',
+    );
+    if (snapshot) return;
+    try {
+      updateSnapshot(await bridge.get());
+    } catch {
+      // Keep the original validation error visible.
+    }
+  };
+
+  const lightingNumber = (
+    field: LightingNumberField,
+    input: HTMLInputElement,
+  ) => {
+    const value = input.valueAsNumber;
+    const [minimum, maximum] = LIGHTING_NUMBER_RANGES[field];
+    return Number.isFinite(value) && value >= minimum && value <= maximum
+      ? value
+      : null;
+  };
+
+  const previewLightingNumber = (
+    field: LightingNumberField,
+    input: HTMLInputElement,
+  ) => {
+    const value = lightingNumber(field, input);
+    if (value != null) previewLightingField(field, value);
+  };
+
+  const saveLightingNumber = (
+    field: LightingNumberField,
+    input: HTMLInputElement,
+  ) => {
+    const value = lightingNumber(field, input);
+    if (value == null) {
+      input.value = String(previewLighting[field]);
+      return;
+    }
+    void saveLightingField(field, value);
+  };
+
+  const resetLighting = async () => {
+    if (!bridge || !selectedModel) return;
+    await run(
+      () => bridge.resetModelLighting(selectedModel.id),
+      'Lighting reset to Persona defaults.',
     );
   };
 
@@ -1172,6 +1276,298 @@ export function SettingsPage() {
                   <span>160%</span>
                 </div>
               </section>
+
+              <section className="settings-panel lighting-panel">
+                <div className="panel-heading">
+                  <div>
+                    <h2>Lighting</h2>
+                    <p>
+                      Adjust environment and key light for VRM models that look
+                      overexposed or too dark.
+                    </p>
+                  </div>
+                  <button
+                    className="lighting-reset-button"
+                    disabled={busy || !bridge || !selectedModel}
+                    onClick={() => void resetLighting()}
+                    type="button"
+                  >
+                    Reset lighting
+                  </button>
+                </div>
+
+                <div className="lighting-select-row">
+                  <span>Tone mapping</span>
+                  <select
+                    disabled={busy || !bridge || !selectedModel}
+                    onChange={(e) => {
+                      const value = e.currentTarget.value as
+                        | 'none'
+                        | 'aces';
+                      previewLightingField('tone_mapping', value);
+                      void saveLightingField('tone_mapping', value);
+                    }}
+                    value={previewLighting.tone_mapping}
+                  >
+                    <option value="none">None</option>
+                    <option value="aces">ACES Filmic</option>
+                  </select>
+                </div>
+
+                <div className="lighting-toggle-row">
+                  <span>HDR environment</span>
+                  <button
+                    aria-checked={previewLighting.environment_enabled}
+                    className={`toggle-switch${previewLighting.environment_enabled ? ' active' : ''}`}
+                    disabled={busy || !bridge || !selectedModel}
+                    onClick={() => {
+                      const next = !previewLighting.environment_enabled;
+                      previewLightingField('environment_enabled', next);
+                      void saveLightingField('environment_enabled', next);
+                    }}
+                    role="switch"
+                    type="button"
+                  />
+                </div>
+
+                <div className="lighting-row">
+                  <label>
+                    <span>Environment intensity</span>
+                    <input
+                      disabled={busy || !bridge || !selectedModel}
+                      max="2"
+                      min="0"
+                      onChange={(event) =>
+                        previewLightingNumber(
+                          'environment_intensity',
+                          event.currentTarget,
+                        )
+                      }
+                      onKeyUp={(event) =>
+                        saveLightingNumber(
+                          'environment_intensity',
+                          event.currentTarget,
+                        )
+                      }
+                      onPointerUp={(event) =>
+                        saveLightingNumber(
+                          'environment_intensity',
+                          event.currentTarget,
+                        )
+                      }
+                      step="0.01"
+                      type="range"
+                      value={previewLighting.environment_intensity}
+                    />
+                    <div className="slider-labels">
+                      <span>0.00</span>
+                      <span>1.00</span>
+                      <span>2.00</span>
+                    </div>
+                  </label>
+                  <input
+                    className="lighting-value"
+                    disabled={busy || !bridge || !selectedModel}
+                    max="2"
+                    min="0"
+                    onBlur={(event) =>
+                      saveLightingNumber(
+                        'environment_intensity',
+                        event.currentTarget,
+                      )
+                    }
+                    onChange={(event) =>
+                      previewLightingNumber(
+                        'environment_intensity',
+                        event.currentTarget,
+                      )
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') event.currentTarget.blur();
+                    }}
+                    step="0.01"
+                    type="number"
+                    value={previewLighting.environment_intensity}
+                  />
+                </div>
+
+                <div className="lighting-row">
+                  <label>
+                    <span>Key light intensity</span>
+                    <input
+                      disabled={busy || !bridge || !selectedModel}
+                      max="4"
+                      min="0"
+                      onChange={(event) =>
+                        previewLightingNumber(
+                          'key_light_intensity',
+                          event.currentTarget,
+                        )
+                      }
+                      onKeyUp={(event) =>
+                        saveLightingNumber(
+                          'key_light_intensity',
+                          event.currentTarget,
+                        )
+                      }
+                      onPointerUp={(event) =>
+                        saveLightingNumber(
+                          'key_light_intensity',
+                          event.currentTarget,
+                        )
+                      }
+                      step="0.01"
+                      type="range"
+                      value={previewLighting.key_light_intensity}
+                    />
+                    <div className="slider-labels">
+                      <span>0.00</span>
+                      <span>{Math.PI.toFixed(2)}</span>
+                      <span>4.00</span>
+                    </div>
+                  </label>
+                  <input
+                    className="lighting-value"
+                    disabled={busy || !bridge || !selectedModel}
+                    max="4"
+                    min="0"
+                    onBlur={(event) =>
+                      saveLightingNumber(
+                        'key_light_intensity',
+                        event.currentTarget,
+                      )
+                    }
+                    onChange={(event) =>
+                      previewLightingNumber(
+                        'key_light_intensity',
+                        event.currentTarget,
+                      )
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') event.currentTarget.blur();
+                    }}
+                    step="0.01"
+                    type="number"
+                    value={previewLighting.key_light_intensity}
+                  />
+                </div>
+
+                <div className="lighting-row">
+                  <label>
+                    <span>Ambient / fill intensity</span>
+                    <input
+                      disabled={busy || !bridge || !selectedModel}
+                      max="4"
+                      min="0"
+                      onChange={(event) =>
+                        previewLightingNumber(
+                          'ambient_intensity',
+                          event.currentTarget,
+                        )
+                      }
+                      onKeyUp={(event) =>
+                        saveLightingNumber(
+                          'ambient_intensity',
+                          event.currentTarget,
+                        )
+                      }
+                      onPointerUp={(event) =>
+                        saveLightingNumber(
+                          'ambient_intensity',
+                          event.currentTarget,
+                        )
+                      }
+                      step="0.01"
+                      type="range"
+                      value={previewLighting.ambient_intensity}
+                    />
+                    <div className="slider-labels">
+                      <span>0.00</span>
+                      <span>{Math.PI.toFixed(2)}</span>
+                      <span>4.00</span>
+                    </div>
+                  </label>
+                  <input
+                    className="lighting-value"
+                    disabled={busy || !bridge || !selectedModel}
+                    max="4"
+                    min="0"
+                    onBlur={(event) =>
+                      saveLightingNumber(
+                        'ambient_intensity',
+                        event.currentTarget,
+                      )
+                    }
+                    onChange={(event) =>
+                      previewLightingNumber(
+                        'ambient_intensity',
+                        event.currentTarget,
+                      )
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') event.currentTarget.blur();
+                    }}
+                    step="0.01"
+                    type="number"
+                    value={previewLighting.ambient_intensity}
+                  />
+                </div>
+
+                <div className="lighting-row">
+                  <label>
+                    <span>Exposure</span>
+                    <input
+                      disabled={busy || !bridge || !selectedModel}
+                      max="3"
+                      min="0.1"
+                      onChange={(event) =>
+                        previewLightingNumber(
+                          'exposure',
+                          event.currentTarget,
+                        )
+                      }
+                      onKeyUp={(event) =>
+                        saveLightingNumber(
+                          'exposure',
+                          event.currentTarget,
+                        )
+                      }
+                      onPointerUp={(event) =>
+                        saveLightingNumber(
+                          'exposure',
+                          event.currentTarget,
+                        )
+                      }
+                      step="0.01"
+                      type="range"
+                      value={previewLighting.exposure}
+                    />
+                    <div className="slider-labels">
+                      <span>0.10</span>
+                      <span>1.00</span>
+                      <span>3.00</span>
+                    </div>
+                  </label>
+                  <input
+                    className="lighting-value"
+                    disabled={busy || !bridge || !selectedModel}
+                    max="3"
+                    min="0.1"
+                    onBlur={(event) =>
+                      saveLightingNumber('exposure', event.currentTarget)
+                    }
+                    onChange={(event) =>
+                      previewLightingNumber('exposure', event.currentTarget)
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') event.currentTarget.blur();
+                    }}
+                    step="0.01"
+                    type="number"
+                    value={previewLighting.exposure}
+                  />
+                </div>
+              </section>
             </>
           )}
 
@@ -1398,6 +1794,7 @@ export function SettingsPage() {
                   animationUrls={previewAnimationUrls}
                   audioLevel={0}
                   characterSize={settings.character_size}
+                  lighting={previewLighting}
                   enablePan={false}
                   framingMargin={1.22}
                   groundShadow

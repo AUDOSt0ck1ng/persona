@@ -50,6 +50,37 @@ const SYSTEM_ACTIONS: PersonaAnimationSettings[] = [
   },
 ];
 
+export const DEFAULT_LIGHTING: PersonaLightingSettings = {
+  tone_mapping: 'none',
+  exposure: 1,
+  environment_enabled: true,
+  environment_intensity: 1,
+  key_light_intensity: Math.PI,
+  ambient_intensity: Math.PI,
+};
+
+export function resolveLightingSettings(
+  lighting?: Partial<PersonaLightingSettings> | null,
+): PersonaLightingSettings {
+  return {
+    tone_mapping:
+      lighting?.tone_mapping ?? DEFAULT_LIGHTING.tone_mapping,
+    exposure: lighting?.exposure ?? DEFAULT_LIGHTING.exposure,
+    environment_enabled:
+      lighting?.environment_enabled ??
+      DEFAULT_LIGHTING.environment_enabled,
+    environment_intensity:
+      lighting?.environment_intensity ??
+      DEFAULT_LIGHTING.environment_intensity,
+    key_light_intensity:
+      lighting?.key_light_intensity ??
+      DEFAULT_LIGHTING.key_light_intensity,
+    ambient_intensity:
+      lighting?.ambient_intensity ??
+      DEFAULT_LIGHTING.ambient_intensity,
+  };
+}
+
 export const SETTINGS_FALLBACK: PersonaSettingsSnapshot = {
   schema_version: 3,
   default_model_id: null,
@@ -57,6 +88,7 @@ export const SETTINGS_FALLBACK: PersonaSettingsSnapshot = {
   packaged_animation_change_count: 0,
   models: [],
   animations: SYSTEM_ACTIONS,
+  model_lighting: {},
 };
 
 function packagedAssetUrl(relativePath: string): string {
