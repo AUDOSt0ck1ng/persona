@@ -251,7 +251,7 @@ export function SettingsPage() {
 
   useEffect(() => {
     if (!notice) return;
-    const timer = window.setTimeout(() => setNotice(null), 4000);
+    const timer = window.setTimeout(() => setNotice(null), 2000);
     return () => window.clearTimeout(timer);
   }, [notice]);
 
@@ -311,6 +311,25 @@ export function SettingsPage() {
         return null;
       } finally {
         setBusy(false);
+      }
+    },
+    [updateSnapshot],
+  );
+
+  const persistAppearance = useCallback(
+    async (
+      operation: () => Promise<PersonaSettingsSnapshot>,
+      success: string,
+    ) => {
+      setNotice(null);
+      try {
+        const snapshot = await operation();
+        updateSnapshot(snapshot);
+        setNotice(success);
+        return snapshot;
+      } catch (error) {
+        setNotice(errorMessage(error));
+        return null;
       }
     },
     [updateSnapshot],
@@ -654,7 +673,7 @@ export function SettingsPage() {
 
   const saveCharacterSize = async (size: number) => {
     if (!bridge) return;
-    await run(
+    await persistAppearance(
       () => bridge.setCharacterSize(size),
       `Default character size set to ${Math.round(size * 100)}%.`,
     );
@@ -692,7 +711,7 @@ export function SettingsPage() {
     value: PersonaLightingSettings[Field],
   ) => {
     if (!bridge || !selectedModel) return;
-    const snapshot = await run(
+    const snapshot = await persistAppearance(
       () =>
         bridge.setModelLighting(selectedModel.id, {
           ...previewLighting,

@@ -539,11 +539,16 @@ button {
 }
 
 .settings-notice {
+  position: fixed;
+  z-index: 90;
+  bottom: 20px;
+  left: 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin: 16px 28px 0;
+  width: max-content;
+  max-width: min(380px, calc(100vw - 40px));
   padding: 10px 10px 10px 14px;
   border: 1px solid var(--border);
   border-left: 2px solid var(--accent);
@@ -551,19 +556,20 @@ button {
   color: var(--text-primary);
   background: var(--bg-card);
   font-size: var(--fs-md);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-overlay);
   animation: notice-in 180ms var(--ease);
 }
 
 @keyframes notice-in {
   from {
     opacity: 0;
-    transform: translateY(-4px);
+    transform: translateY(8px);
   }
 }
 
 .settings-notice span {
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .settings-notice button {
@@ -2332,11 +2338,6 @@ button {
   .settings-scroll {
     padding-right: 22px;
     padding-left: 22px;
-  }
-
-  .settings-notice {
-    margin-right: 22px;
-    margin-left: 22px;
   }
 
   .asset-grid,
