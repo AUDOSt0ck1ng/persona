@@ -8,9 +8,14 @@ const {
   compileVoiceSourcePattern,
   configuredPattern,
   normalizeVoiceSource,
+  pipeWirePropertiesMatchSource,
+  pipeWireSourceFromProperties,
+  processMatchesSource,
   resolveVoiceSourcePattern,
+  sanitizeVoiceSource,
   sanitizeVoiceSourcePattern,
   settingsPatternFromVoiceSource,
+  sourceFromProcess,
 } = require("./voice-source.cjs");
 
 test("compiles the shared default ChatGPT and Codex pattern", () => {
@@ -54,7 +59,12 @@ test("sanitizes and normalizes persisted voice source values", () => {
   assert.deepEqual(normalizeVoiceSource(null), DEFAULT_VOICE_SOURCE);
   assert.deepEqual(
     normalizeVoiceSource({ mode: "custom", process_pattern: "local-tts" }),
-    { mode: "custom", process_pattern: "local-tts" },
+    {
+      mode: "custom",
+      process_pattern: "local-tts",
+      source_id: null,
+      source_name: null,
+    },
   );
   assert.deepEqual(
     normalizeVoiceSource({ mode: "custom", process_pattern: "[" }),
@@ -68,7 +78,85 @@ test("sanitizes and normalizes persisted voice source values", () => {
     "local-tts",
   );
   assert.equal(
-    settingsPatternFromVoiceSource({ mode: "default", process_pattern: null }),
+    settingsPatternFromVoiceSource(DEFAULT_VOICE_SOURCE),
     null,
   );
+});
+
+test("normalizes all voice modes and rejects arbitrary application IDs", () => {
+  assert.deepEqual(
+    sanitizeVoiceSource({
+      mode: "external",
+      process_pattern: "ignored",
+      source_id: "ignored",
+      source_name: "Ignored",
+    }),
+    {
+      mode: "external",
+      process_pattern: null,
+      source_id: null,
+      source_name: null,
+    },
+  );
+  assert.deepEqual(
+    normalizeVoiceSource({
+      mode: "application",
+      source_id: "arbitrary",
+      source_name: "Voice",
+    }),
+    DEFAULT_VOICE_SOURCE,
+  );
+  assert.throws(
+    () =>
+      sanitizeVoiceSource({
+        mode: "application",
+        source_id: "arbitrary",
+        source_name: "Voice",
+      }),
+    /valid application/,
+  );
+  assert.deepEqual(
+    normalizeVoiceSource({
+      mode: "application",
+      source_id: "pipewire:stream:e30",
+      source_name: "Everything",
+    }),
+    DEFAULT_VOICE_SOURCE,
+  );
+});
+
+test("creates stable native process sources and matches Windows paths case-insensitively", () => {
+  const source = sourceFromProcess("win32", {
+    name: "Voice.exe",
+    executable: "C:\\Apps\\Voice\\Voice.exe",
+  });
+  assert.equal(source.name, "Voice");
+  assert.equal(
+    processMatchesSource(
+      {
+        name: "voice.exe",
+        executable: "c:\\apps\\voice\\voice.exe",
+      },
+      "win32",
+      source.id,
+    ),
+    true,
+  );
+});
+
+test("creates exact PipeWire stream sources without collapsing generic Electron apps", () => {
+  const voiceProperties = {
+    "application.name": "Electron",
+    "application.process.binary": "voice-ui",
+    "node.name": "voice-output",
+  };
+  const musicProperties = {
+    "application.name": "Electron",
+    "application.process.binary": "music-ui",
+    "node.name": "music-output",
+  };
+  const source = pipeWireSourceFromProperties(voiceProperties);
+  assert.equal(source.name, "Electron");
+  assert.equal(pipeWirePropertiesMatchSource(voiceProperties, source.id), true);
+  assert.equal(pipeWirePropertiesMatchSource(musicProperties, source.id), false);
 });

@@ -116,3 +116,27 @@ test("native listener cannot attach after it is stopped during discovery", async
 
   assert.equal(spawnCount, 0);
 });
+
+test("native listener resolves the configured application before capture", async () => {
+  let discoveryOptions = null;
+  const voiceSource = {
+    mode: "application",
+    process_pattern: null,
+    source_id: "process:darwin:Vm9pY2U",
+    source_name: "Voice",
+  };
+  const listener = new NativeProcessAudioListener({
+    platform: "darwin",
+    helperPath: __filename,
+    voiceSource,
+    processDiscovery: async (options) => {
+      discoveryOptions = options;
+      return { pids: [], rootPids: [] };
+    },
+  });
+
+  await listener.start();
+  listener.stop();
+
+  assert.deepEqual(discoveryOptions.voiceSource, voiceSource);
+});

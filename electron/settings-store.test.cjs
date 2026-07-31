@@ -213,7 +213,7 @@ test("keeps user library records when migrating the earlier settings schema", (c
   );
 
   const snapshot = createSettingsStore({ userDataPath, packagedLibraryPath }).getSnapshot();
-  assert.equal(snapshot.schema_version, 4);
+  assert.equal(snapshot.schema_version, 5);
   assert.equal(snapshot.default_model_id, modelId);
   assert.equal(snapshot.character_size, 1.15);
   assert.ok(snapshot.models.some((model) => model.id === modelId));
@@ -533,51 +533,86 @@ test("groups multiple uploaded clips under one action and removes them independe
   );
 });
 
-test("persists a custom voice source and migrates older settings to schema 4", (context) => {
+test("persists every voice source mode and migrates schema 4 settings", (context) => {
   const { userDataPath, packagedLibraryPath } = fixture(context);
   const store = createSettingsStore({ userDataPath, packagedLibraryPath });
   assert.deepEqual(store.getSnapshot().voice_source, {
     mode: "default",
     process_pattern: null,
+    source_id: null,
+    source_name: null,
   });
 
   let snapshot = store.setVoiceSource({
     mode: "custom",
     process_pattern: "  local-tts|open-webui  ",
   });
-  assert.equal(snapshot.schema_version, 4);
+  assert.equal(snapshot.schema_version, 5);
   assert.deepEqual(snapshot.voice_source, {
     mode: "custom",
     process_pattern: "local-tts|open-webui",
+    source_id: null,
+    source_name: null,
   });
   assert.throws(
     () => store.setVoiceSource({ mode: "custom", process_pattern: "[" }),
     /valid regular expression/,
   );
 
-  snapshot = store.setVoiceSource({ mode: "default", process_pattern: null });
-  assert.deepEqual(snapshot.voice_source, {
-    mode: "default",
+  snapshot = store.setVoiceSource({
+    mode: "application",
     process_pattern: null,
+    source_id: "process:win32:Vm9pY2U",
+    source_name: "Voice",
   });
+  assert.deepEqual(snapshot.voice_source, {
+    mode: "application",
+    process_pattern: null,
+    source_id: "process:win32:Vm9pY2U",
+    source_name: "Voice",
+  });
+
+  snapshot = store.setVoiceSource({ mode: "external" });
+  assert.deepEqual(snapshot.voice_source, {
+    mode: "external",
+    process_pattern: null,
+    source_id: null,
+    source_name: null,
+  });
+
+  assert.throws(
+    () =>
+      store.setVoiceSource({
+        mode: "application",
+        source_id: "arbitrary",
+        source_name: "Voice",
+      }),
+    /valid application/,
+  );
 
   fs.writeFileSync(
     path.join(userDataPath, "settings.json"),
     JSON.stringify({
-      schema_version: 3,
+      schema_version: 4,
       models: [],
       animations: [],
       animation_clips: {},
       model_lighting: {},
+      voice_source: {
+        mode: "custom",
+        process_pattern: "voice-engine",
+      },
     }),
   );
   const migrated = createSettingsStore({
     userDataPath,
     packagedLibraryPath,
   }).getSnapshot();
-  assert.equal(migrated.schema_version, 4);
+  assert.equal(migrated.schema_version, 5);
   assert.deepEqual(migrated.voice_source, {
-    mode: "default",
-    process_pattern: null,
+    mode: "custom",
+    process_pattern: "voice-engine",
+    source_id: null,
+    source_name: null,
   });
 });

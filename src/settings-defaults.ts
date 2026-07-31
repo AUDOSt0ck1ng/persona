@@ -82,7 +82,7 @@ export function resolveLightingSettings(
 }
 
 export const SETTINGS_FALLBACK: PersonaSettingsSnapshot = {
-  schema_version: 4,
+  schema_version: 5,
   default_model_id: null,
   character_size: 1,
   packaged_animation_change_count: 0,
@@ -92,6 +92,8 @@ export const SETTINGS_FALLBACK: PersonaSettingsSnapshot = {
   voice_source: {
     mode: 'default',
     process_pattern: null,
+    source_id: null,
+    source_name: null,
   },
 };
 

@@ -58,31 +58,36 @@ The MCP endpoint uses the same port as the local HTTP API. If
 
 ## Automatic listeners
 
-Listeners attach to the configured voice source (ChatGPT/Codex by default, or a
-custom process pattern from Settings / `PERSONA_TARGET_PROCESS_PATTERN`).
+Listeners attach to the configured voice source: automatic ChatGPT/Codex
+detection, one selected application, or an advanced process pattern.
 
 ### Linux
 
-Persona polls the PipeWire graph for a playback node that matches the configured
-voice-source pattern. It attaches `pw-record` to that one stream, calculates RMS
-amplitude in memory, and discards every sample after calculation. The stream
-remains connected to its normal output device.
+Persona polls the PipeWire graph for either the selected playback stream or a
+node matching the configured process pattern. It attaches `pw-record` to that
+one stream, calculates RMS amplitude in memory, and discards every sample after
+calculation. The stream remains connected to its normal output device.
 
 ### Windows
 
 The native helper uses WASAPI application loopback with
 `PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE`. Audio from other
 applications is excluded. Persona supports Windows 10 build 20348 and newer.
+Application mode resolves the saved executable identity to its current process
+tree before starting the helper.
 
 ### macOS
 
 The native helper creates a private, unmuted Core Audio process tap and private
 aggregate device for the selected voice process. Persona supports macOS 14.2
 and newer and declares why it requests System Audio Recording permission.
+Application mode resolves the saved executable identity to its current process
+tree before creating the tap.
 
 Set `PERSONA_TARGET_PROCESS_PATTERN` to a case-insensitive regular expression
-to target another desktop voice application. This environment variable overrides
-the Voice source chosen in Settings:
+to target another desktop voice application. This environment variable
+overrides automatic and advanced-pattern matching, but not an explicitly
+selected application or external mode:
 
 ```bash
 PERSONA_TARGET_PROCESS_PATTERN='my-voice-app' persona
@@ -93,10 +98,15 @@ PERSONA_TARGET_PROCESS_PATTERN='my-voice-app' persona
 Open **Settings → Voice** to choose which application Persona watches for
 automatic lip sync:
 
-- **ChatGPT / Codex** keeps the built-in matcher used by default.
-- **Custom pattern** accepts a case-insensitive regular expression matched
+- **Automatic** keeps the built-in ChatGPT/Codex matcher.
+- **Application** lists current playback streams on Linux and running
+  applications on macOS and Windows, then persists a stable identity rather
+  than a temporary PID or PipeWire serial.
+- **Advanced** accepts a case-insensitive regular expression matched
   against process names and command lines on macOS and Windows, and against
   PipeWire application identity (plus process ancestry) on Linux.
+- **External** disables automatic capture and waits for normalized state and
+  level events through the loopback API.
 
 Persona still calculates only an in-memory output level. It does not capture the
 microphone, run language models, transcribe speech, or send audio over the

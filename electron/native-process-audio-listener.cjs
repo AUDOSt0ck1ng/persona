@@ -5,6 +5,7 @@ const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { AudioActivityGate, DEFAULT_SPEECH_RELEASE_MS } = require("./audio-activity-gate.cjs");
 const { discoverVoiceProcesses } = require("./process-discovery.cjs");
+const { normalizeVoiceSource } = require("./voice-source.cjs");
 
 const SESSION_IDLE_MS = 8_000;
 
@@ -59,12 +60,14 @@ class NativeProcessAudioListener {
     sessionIdleMs = SESSION_IDLE_MS,
     speechReleaseMs = DEFAULT_SPEECH_RELEASE_MS,
     processPattern = null,
+    voiceSource = null,
   } = {}) {
     this.platform = platform;
     this.helperPath =
       helperPath ?? resolveNativeHelperPath({ platform, isPackaged, resourcesPath });
     this.processDiscovery = processDiscovery;
     this.processPattern = processPattern;
+    this.voiceSource = normalizeVoiceSource(voiceSource);
     this.spawnProcess = spawnProcess;
     this.onActivity = onActivity;
     this.onDebug = onDebug;
@@ -125,6 +128,7 @@ class NativeProcessAudioListener {
     try {
       const processes = await this.processDiscovery({
         platform: this.platform,
+        voiceSource: this.voiceSource,
         ...(this.processPattern ? { pattern: this.processPattern } : {}),
       });
       if (this.stopped) return;

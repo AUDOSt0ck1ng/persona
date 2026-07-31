@@ -4,7 +4,11 @@ const { execFile, spawn } = require("node:child_process");
 const fs = require("node:fs");
 const { promisify } = require("node:util");
 const { AudioActivityGate, DEFAULT_SPEECH_RELEASE_MS } = require("./audio-activity-gate.cjs");
-const { DEFAULT_VOICE_APP_PATTERN } = require("./voice-source.cjs");
+const {
+  DEFAULT_VOICE_APP_PATTERN,
+  normalizeVoiceSource,
+  pipeWirePropertiesMatchSource,
+} = require("./voice-source.cjs");
 
 const execFileAsync = promisify(execFile);
 const SPEECH_RELEASE_MS = DEFAULT_SPEECH_RELEASE_MS;
@@ -105,9 +109,23 @@ function isCodexOutputNode(
   processMatcher = null,
   pattern = DEFAULT_VOICE_APP_PATTERN,
 ) {
+  return isVoiceOutputNode(node, null, processMatcher, pattern);
+}
+
+function isVoiceOutputNode(
+  node,
+  voiceSource = null,
+  processMatcher = null,
+  pattern = DEFAULT_VOICE_APP_PATTERN,
+) {
   if (node?.type !== "PipeWire:Interface:Node") return false;
   const properties = nodeProperties(node);
   if (properties["media.class"] !== "Stream/Output/Audio") return false;
+  const selected = normalizeVoiceSource(voiceSource);
+  if (selected.mode === "application") {
+    return pipeWirePropertiesMatchSource(properties, selected.source_id);
+  }
+  if (selected.mode === "external") return false;
   const identity = [
     properties["application.name"],
     properties["application.process.binary"],
@@ -131,6 +149,15 @@ function findCodexOutputNode(
   processMatcher = null,
   pattern = DEFAULT_VOICE_APP_PATTERN,
 ) {
+  return findVoiceOutputNode(nodes, null, processMatcher, pattern);
+}
+
+function findVoiceOutputNode(
+  nodes,
+  voiceSource = null,
+  processMatcher = null,
+  pattern = DEFAULT_VOICE_APP_PATTERN,
+) {
   const processCache = new Map();
   const matcher =
     processMatcher ??
@@ -141,7 +168,7 @@ function findCodexOutputNode(
     return processCache.get(key);
   };
   const matches = nodes.filter((node) =>
-    isCodexOutputNode(node, cachedMatcher, pattern),
+    isVoiceOutputNode(node, voiceSource, cachedMatcher, pattern),
   );
   return (
     matches.find((node) => node.info?.state === "running") ??
@@ -188,6 +215,7 @@ class LinuxPipeWireListener {
     pollIntervalMs = 750,
     speechReleaseMs = SPEECH_RELEASE_MS,
     processPattern = DEFAULT_VOICE_APP_PATTERN,
+    voiceSource = null,
   } = {}) {
     this.onActivity = onActivity;
     this.onDebug = onDebug;
@@ -197,6 +225,7 @@ class LinuxPipeWireListener {
     this.pollIntervalMs = pollIntervalMs;
     this.speechReleaseMs = speechReleaseMs;
     this.processPattern = processPattern ?? DEFAULT_VOICE_APP_PATTERN;
+    this.voiceSource = normalizeVoiceSource(voiceSource);
     this.capture = null;
     this.captureSerial = null;
     this.currentNode = null;
@@ -269,7 +298,12 @@ class LinuxPipeWireListener {
           this.onDebug(outputNodes);
         }
       }
-      const node = findCodexOutputNode(nodes, null, this.processPattern);
+      const node = findVoiceOutputNode(
+        nodes,
+        this.voiceSource,
+        null,
+        this.processPattern,
+      );
       if (node == null) {
         this.detach();
         return;
@@ -393,8 +427,11 @@ module.exports = {
   SPEECH_RELEASE_MS,
   enrichPipeWireNodes,
   findCodexOutputNode,
+  findVoiceOutputNode,
   isCodexOutputNode,
   isCodexProcessTree,
+  isVoiceOutputNode,
+  nodeProperties,
   normalizeRms,
   pcm16Rms,
   readProcessInfo,

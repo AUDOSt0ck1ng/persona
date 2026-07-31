@@ -15,19 +15,19 @@ an expressive visual identity alongside your work.
 
 ## Platform support
 
-| Platform    | Automatic voice output listener | Distribution               |
-| ----------- | ------------------------------- | -------------------------- |
-| Linux       | PipeWire process-stream capture | AppImage and DEB           |
-| Windows     | WASAPI process-loopback capture | NSIS installer             |
-| macOS 14.2+ | Core Audio process tap          | DMG and ZIP, arm64 and x64 |
+| Platform    | Voice output listener            | Distribution               |
+| ----------- | -------------------------------- | -------------------------- |
+| Linux       | PipeWire playback-stream capture | AppImage and DEB           |
+| Windows     | WASAPI process-loopback capture  | NSIS installer             |
+| macOS 14.2+ | Core Audio process tap           | DMG and ZIP, arm64 and x64 |
 
 Linux requires `pw-dump` and `pw-record` on `PATH`. Windows process-loopback
 requires Windows 10 build 20348 or newer. macOS asks once for System Audio
 Recording permission.
 
-Each listener is scoped to the supported application's playback process. Persona
-does not capture the microphone, save audio, produce speech, transcribe content,
-or send audio over the network.
+Each listener is scoped to an automatically detected or user-selected playback
+process. Persona does not capture the microphone, save audio, produce speech,
+transcribe content, or send audio over the network.
 
 ## Try Persona locally
 
@@ -116,9 +116,10 @@ only exposes its own visual controls.
 ## Local voice apps
 
 Persona does not run language models. To use it with a local model stack, open
-**Settings → Voice** and point the automatic listener at the app that plays
-assistant audio, or drive lip sync from your pipeline through the loopback HTTP
-API and `persona://` URLs. Any compatible MCP client can use the same animation
+**Settings → Voice** and select the running app or Linux playback stream that
+produces assistant audio. Advanced users can supply a cross-platform process
+pattern, while pipelines that already calculate output levels can use the
+external-events mode. Any compatible MCP client can use the same animation
 tools as Codex. See [Integrations](docs/INTEGRATIONS.md).
 
 The window intentionally contains no controls:
