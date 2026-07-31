@@ -70,8 +70,25 @@ interface PersonaAnimationClipSettings {
 }
 
 interface PersonaVoiceSourceSettings {
-  mode: 'default' | 'custom';
+  mode: 'default' | 'application' | 'custom' | 'external';
   process_pattern: string | null;
+  source_id: string | null;
+  source_name: string | null;
+}
+
+interface PersonaVoiceSource {
+  id: string;
+  name: string;
+  detail: string;
+  platform: 'linux' | 'darwin' | 'win32';
+}
+
+interface PersonaVoiceSourceCatalog {
+  error: string | null;
+  events_url: string;
+  listener: AudioListenerStatus | null;
+  platform: string;
+  sources: PersonaVoiceSource[];
 }
 
 interface PersonaSettingsSnapshot {
@@ -152,6 +169,7 @@ interface Window {
     setVoiceSource(
       voiceSource: PersonaVoiceSourceSettings,
     ): Promise<PersonaSettingsSnapshot>;
+    listVoiceSources(): Promise<PersonaVoiceSourceCatalog>;
     setModelLighting(
       modelId: string,
       lighting: Partial<PersonaLightingSettings>,

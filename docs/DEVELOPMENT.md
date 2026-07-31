@@ -101,12 +101,17 @@ level immediately. The body remains in its talking motion for 900 ms of silence
 before returning to listening, preventing sentence gaps from causing abrupt
 animation changes.
 
-Target process matching is shared through `electron/voice-source.cjs`. Settings
-stores a default ChatGPT/Codex mode or a custom regex; `PERSONA_TARGET_PROCESS_PATTERN`
-overrides that value when set. Linux PipeWire identity matching and
-macOS/Windows process discovery both consume the resolved pattern so a Voice
-source change behaves the same on every platform. Changing the setting recreates
-the active listener immediately.
+Voice-source validation and stable identities are shared through
+`electron/voice-source.cjs`; discovery lives in
+`electron/voice-source-discovery.cjs`. Settings supports automatic detection,
+an exact application or PipeWire stream, an advanced regex, and external event
+mode. `PERSONA_TARGET_PROCESS_PATTERN` overrides automatic and advanced
+matching when set. Every source change recreates the listener immediately.
+
+Linux persists a composite PipeWire stream identity so generic application
+names such as `Electron` cannot collapse unrelated playback streams. macOS and
+Windows persist executable identity and resolve the current process tree before
+starting the native helper. PIDs and PipeWire object serials are never stored.
 
 Linux implements the contract directly with PipeWire commands. macOS and
 Windows helpers write newline-delimited JSON to stdout:

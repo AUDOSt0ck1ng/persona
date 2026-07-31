@@ -79,6 +79,7 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
     mode: "custom",
     process_pattern: "local-tts",
   });
+  await settings.listVoiceSources();
   await settings.setModelLighting("model-id", {
     exposure: 1.2,
     environment_intensity: 0.35,
@@ -123,6 +124,7 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
       "persona:settings-set-voice-source",
       { mode: "custom", process_pattern: "local-tts" },
     ],
+    ["persona:settings-list-voice-sources"],
     [
       "persona:settings-set-model-lighting",
       "model-id",

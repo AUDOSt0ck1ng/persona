@@ -12,10 +12,10 @@ const {
 const {
   DEFAULT_VOICE_SOURCE,
   normalizeVoiceSource,
-  sanitizeVoiceSourcePattern,
+  sanitizeVoiceSource,
 } = require("./voice-source.cjs");
 
-const SETTINGS_SCHEMA_VERSION = 4;
+const SETTINGS_SCHEMA_VERSION = 5;
 const DEFAULT_PACKAGED_LIBRARY_PATH = path.join(
   __dirname,
   "..",
@@ -337,7 +337,7 @@ function safeReadState(settingsPath, packagedLibrary) {
   const fallback = defaultState(packagedLibrary);
   try {
     const parsed = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
-    if (![1, 2, 3, SETTINGS_SCHEMA_VERSION].includes(parsed?.schema_version)) {
+    if (![1, 2, 3, 4, SETTINGS_SCHEMA_VERSION].includes(parsed?.schema_version)) {
       return { migrated: false, state: fallback };
     }
     const { hidden, overrides } = packagedUserLayers(parsed, packagedLibrary);
@@ -365,7 +365,7 @@ function safeReadState(settingsPath, packagedLibrary) {
     };
 
     if (parsed.schema_version !== SETTINGS_SCHEMA_VERSION) {
-      if (parsed.schema_version === 3) {
+      if ([3, 4].includes(parsed.schema_version)) {
         const animations = sanitizeUserAnimations(parsed.animations);
         const knownAnimationIds = new Set([
           ...packagedLibrary.animations.map((animation) => animation.id),
@@ -830,16 +830,7 @@ function createSettingsStore({
   }
 
   function setVoiceSource(value) {
-    const mode = value?.mode === "custom" ? "custom" : "default";
-    if (mode === "default") {
-      state.voice_source = { ...DEFAULT_VOICE_SOURCE };
-      writeState();
-      return getSnapshot();
-    }
-    state.voice_source = {
-      mode: "custom",
-      process_pattern: sanitizeVoiceSourcePattern(value?.process_pattern),
-    };
+    state.voice_source = sanitizeVoiceSource(value);
     writeState();
     return getSnapshot();
   }

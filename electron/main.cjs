@@ -27,6 +27,7 @@ const {
   getHyprlandWindowPlacement,
 } = require("./hyprland-window.cjs");
 const { createAudioListener } = require("./audio-listener.cjs");
+const { listVoiceSources } = require("./voice-source-discovery.cjs");
 const { isAllowedRendererNavigation } = require("./navigation-policy.cjs");
 const { snapshotHasConfiguredModel } = require("./model-readiness.cjs");
 const { parseProtocolUrl, voiceState } = require("./protocol-actions.cjs");
@@ -34,6 +35,7 @@ const {
   createSettingsWindowPresentationGate,
 } = require("./settings-window-presentation.cjs");
 const {
+  normalizeVoiceSource,
   resolveVoiceSourcePattern,
   settingsPatternFromVoiceSource,
 } = require("./voice-source.cjs");
@@ -413,17 +415,21 @@ function publishSettings(snapshot) {
 }
 
 function resolveListenerProcessPattern(snapshot = settingsStore?.getSnapshot()) {
+  const voiceSource = normalizeVoiceSource(snapshot?.voice_source);
+  if (!["default", "custom"].includes(voiceSource.mode)) return null;
   return resolveVoiceSourcePattern({
     environment: process.env,
-    settingsPattern: settingsPatternFromVoiceSource(snapshot?.voice_source),
+    settingsPattern: settingsPatternFromVoiceSource(voiceSource),
   });
 }
 
-function createConfiguredAudioListener() {
+function createConfiguredAudioListener(snapshot = settingsStore?.getSnapshot()) {
+  const voiceSource = normalizeVoiceSource(snapshot?.voice_source);
   return createAudioListener({
     isPackaged: app.isPackaged,
     resourcesPath: process.resourcesPath,
-    processPattern: resolveListenerProcessPattern(),
+    processPattern: resolveListenerProcessPattern(snapshot),
+    voiceSource,
     onActivity: (activity) => {
       debugLog("listener activity", activity);
       handleBridgeEvent(voiceState(activity));
@@ -441,17 +447,31 @@ function createConfiguredAudioListener() {
   });
 }
 
+function reportInactiveListenerStatus(snapshot = settingsStore?.getSnapshot()) {
+  const voiceSource = normalizeVoiceSource(snapshot?.voice_source);
+  handleListenerStatus({
+    available: voiceSource.mode === "external",
+    capturing: false,
+    monitoring: false,
+    source:
+      voiceSource.mode === "external" ? "External integration" : null,
+  });
+}
+
 function restartAudioListener() {
   audioListener?.stop();
   audioListener = createConfiguredAudioListener();
-  if (audioListener && modelConfigured) void audioListener.start();
-  if (!audioListener) {
+  if (audioListener && modelConfigured) {
+    void audioListener.start();
+  } else if (audioListener) {
     handleListenerStatus({
-      available: false,
+      available: true,
       capturing: false,
       monitoring: false,
       source: null,
     });
+  } else {
+    reportInactiveListenerStatus();
   }
 }
 
@@ -767,6 +787,24 @@ if (!app.requestSingleInstanceLock()) {
       restartAudioListener();
       return snapshot;
     });
+    ipcMain.handle("persona:settings-list-voice-sources", async () => {
+      try {
+        return {
+          ...(await listVoiceSources()),
+          error: null,
+          events_url: `http://127.0.0.1:${mcpServerPort}/events`,
+          listener: latestListenerStatus,
+        };
+      } catch (error) {
+        return {
+          error: error instanceof Error ? error.message : String(error),
+          events_url: `http://127.0.0.1:${mcpServerPort}/events`,
+          listener: latestListenerStatus,
+          platform: process.platform,
+          sources: [],
+        };
+      }
+    });
     ipcMain.handle(
       "persona:settings-set-model-lighting",
       (_event, modelId, lighting) =>
@@ -838,14 +876,17 @@ if (!app.requestSingleInstanceLock()) {
     handleProtocolArgv(process.argv);
 
     audioListener = createConfiguredAudioListener();
-    if (audioListener && modelConfigured) void audioListener.start();
-    if (!audioListener) {
+    if (audioListener && modelConfigured) {
+      void audioListener.start();
+    } else if (audioListener) {
       handleListenerStatus({
-        available: false,
+        available: true,
         capturing: false,
         monitoring: false,
         source: null,
       });
+    } else {
+      reportInactiveListenerStatus();
     }
 
     if (!modelConfigured || startInSettings) {

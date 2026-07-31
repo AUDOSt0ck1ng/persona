@@ -9,9 +9,12 @@ pull request before it has been reviewed.
 
 ## Data boundary
 
-Persona's automatic listeners calculate a numeric output level in memory. They
-do not capture the microphone, write audio to disk, transcribe it, or send it
-over the network.
+Persona's automatic and selected-application listeners calculate a numeric
+output level in memory. They do not capture the microphone, write audio to
+disk, transcribe it, or send it over the network. Source discovery exposes only
+bounded display names and executable or stream identity to Persona's sandboxed
+Settings renderer; command-line arguments are not exposed there. A selected
+source identity is persisted only in Persona's local settings.
 
 The integration server binds only to `127.0.0.1`, rejects non-loopback `Host`
 headers, restricts browser origins, and limits request bodies. Its event API

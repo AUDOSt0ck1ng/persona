@@ -48,7 +48,8 @@ Treat signed and notarized artifacts as the production release path.
      starting the listener;
    - selecting the first model activates the avatar and listener;
    - first-run system audio permission where applicable;
-   - supported voice process discovery;
+   - automatic, selected-application, advanced-pattern, and external voice modes;
+   - selected Linux playback-stream and macOS/Windows process discovery;
    - idle, short pause, long pause, and resumed speech;
    - immediate lip response to output;
    - no microphone capture, duplicate sound, or saved audio;

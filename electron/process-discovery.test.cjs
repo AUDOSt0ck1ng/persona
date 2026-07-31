@@ -4,17 +4,27 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const {
   configuredPattern,
+  mergeMacProcessCommands,
+  parseMacCommandList,
   parseMacProcessList,
   parseWindowsProcessList,
   selectVoiceProcessTree,
 } = require("./process-discovery.cjs");
+const { sourceFromProcess } = require("./voice-source.cjs");
 
 test("parses macOS ps output and includes a Codex helper process tree", () => {
-  const processes = parseMacProcessList(`
-  10 1 /Applications/Codex.app/Contents/MacOS/Codex /Applications/Codex.app/Contents/MacOS/Codex
-  11 10 /Applications/Codex Helper /Applications/Codex.app/Contents/Frameworks/Codex Helper --type=utility
-  20 1 /Applications/Music.app/MacOS/Music /Applications/Music.app/MacOS/Music
-`);
+  const processes = mergeMacProcessCommands(
+    parseMacProcessList(`
+  10 1 /Applications/Codex.app/Contents/MacOS/Codex
+  11 10 /Applications/Codex Helper.app/Contents/MacOS/Codex Helper
+  20 1 /Applications/Music.app/MacOS/Music
+`),
+    parseMacCommandList(`
+  10 /Applications/Codex.app/Contents/MacOS/Codex
+  11 /Applications/Codex Helper.app/Contents/MacOS/Codex Helper --type=utility
+  20 /Applications/Music.app/MacOS/Music
+`),
+  );
   assert.deepEqual(selectVoiceProcessTree(processes, { ownProcessId: 99 }), {
     pids: [10, 11],
     rootPids: [10],
@@ -28,6 +38,7 @@ test("parses one or many Windows CIM process records", () => {
         ProcessId: 100,
         ParentProcessId: 1,
         Name: "Codex.exe",
+        ExecutablePath: "C:\\Program Files\\Codex\\Codex.exe",
         CommandLine: '"C:\\\\Program Files\\\\Codex\\\\Codex.exe"',
       },
       {
@@ -43,6 +54,34 @@ test("parses one or many Windows CIM process records", () => {
     rootPids: [100],
   });
   assert.equal(parseWindowsProcessList('{"ProcessId":7,"Name":"ChatGPT.exe"}')[0].pid, 7);
+});
+
+test("selects a saved native application by stable executable identity", () => {
+  const processes = [
+    {
+      pid: 70,
+      parentId: 1,
+      name: "Voice Engine",
+      executable: "/Applications/Voice Engine.app/Contents/MacOS/Voice Engine",
+      command: "Voice Engine --server",
+    },
+    {
+      pid: 71,
+      parentId: 70,
+      name: "Voice Helper",
+      executable: "/Applications/Voice Engine.app/Contents/MacOS/Voice Helper",
+      command: "Voice Helper --audio",
+    },
+  ];
+  const source = sourceFromProcess("darwin", processes[0]);
+  assert.deepEqual(
+    selectVoiceProcessTree(processes, {
+      ownProcessId: 999,
+      platform: "darwin",
+      sourceId: source.id,
+    }),
+    { pids: [70, 71], rootPids: [70] },
+  );
 });
 
 test("supports a custom target application pattern without accepting invalid regex", () => {

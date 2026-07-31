@@ -11,4 +11,11 @@ test("selects the native listener implementation for each supported platform", (
   assert.ok(createAudioListener({ platform: "darwin" }) instanceof NativeProcessAudioListener);
   assert.ok(createAudioListener({ platform: "win32" }) instanceof NativeProcessAudioListener);
   assert.equal(createAudioListener({ platform: "freebsd" }), null);
+  assert.equal(
+    createAudioListener({
+      platform: "linux",
+      voiceSource: { mode: "external" },
+    }),
+    null,
+  );
 });
