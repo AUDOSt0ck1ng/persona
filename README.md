@@ -8,8 +8,8 @@
   A realtime character presence for desktop voice experiences.
 </p>
 
-<p align="center" style="max-width: 600px; margin:0 auto; border-radius: 8px; overflow: hidden;">
-<image src="./public/assets/demo.jpg" alt="Persona demo" />
+<p align="center" style="max-width: 700px; margin:0 auto; border-radius: 8px; overflow: hidden;">
+<image src="./public/assets/demo.jpg" alt="Persona demo" width=700 />
 </p>
 
 Persona is a cross-platform desktop character that gives voice conversations
