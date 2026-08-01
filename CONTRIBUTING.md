@@ -160,7 +160,8 @@ For any proposed packaged asset:
 5. Run `npm run assets:release`.
 
 The MIT license covers Persona's application source, not third-party character
-media. See [ASSET_LICENSES.md](ASSET_LICENSES.md) for the complete policy.
+media. See [`public/assets/LICENSES.md`](public/assets/LICENSES.md) for the
+complete policy.
 
 ## Pull requests
 
