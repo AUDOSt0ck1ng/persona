@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./public/assets/avatar.png" alt="Persona avatar" width="144" />
+  <img src="./public/assets/avatar.png" alt="Persona avatar" width="96" />
 </p>
 
 <h1 align="center">Persona</h1>
@@ -8,7 +8,9 @@
   A realtime character presence for desktop voice experiences.
 </p>
 
----
+<p align="center" style="max-width: 600px; margin:0 auto; border-radius: 8px; overflow: hidden;">
+<image src="./public/assets/demo.jpg" alt="Persona demo" />
+</p>
 
 Persona is a cross-platform desktop character that gives voice conversations
 an expressive visual identity alongside your work.
@@ -178,8 +180,8 @@ and zero or more asset paths. The permanent `system-idle` and
 media path in `manifest.json`, then
 complete its license and source fields and set `distributionAllowed` to `true`.
 Remove the VRM and VRMA ignore rules only when the chosen files are safe to
-publish. The release workflow will fail closed until then. Read
-[Asset licenses](ASSET_LICENSES.md).
+publish. The release workflow will fail closed until then. Read the
+[asset license terms](public/assets/LICENSES.md).
 
 ## Development
 
@@ -203,6 +205,10 @@ More detail:
 - [Release process](docs/RELEASING.md)
 - [Security policy](SECURITY.md)
 
-Persona application source is licensed under the [MIT License](LICENSE).
-Bundled character assets are excluded from that license and remain test-only
-until replaced and documented.
+## License
+
+The source code in this repository is licensed under the [MIT License](LICENSE).
+
+Character assets located under `public/assets/` are excluded from the MIT
+License and are subject to their own respective license terms. See
+[`public/assets/LICENSES.md`](public/assets/LICENSES.md) for details.

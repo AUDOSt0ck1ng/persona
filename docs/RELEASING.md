@@ -27,8 +27,8 @@ Treat signed and notarized artifacts as the production release path.
 2. Declare every packaged item and its product metadata in
    `public/assets/library.json`.
 3. Mirror every media path in `public/assets/manifest.json`, complete the
-   license records and `ASSET_LICENSES.md`, then set `distributionAllowed` to
-   `true`.
+   license records and `public/assets/LICENSES.md`, then set
+   `distributionAllowed` to `true`.
 4. Update `version` in `package.json` and `package-lock.json`.
 5. Add release notes to `CHANGELOG.md`.
 6. Run:
