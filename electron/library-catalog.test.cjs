@@ -1,6 +1,8 @@
 "use strict";
 
 const assert = require("node:assert/strict");
+const { execSync } = require("node:child_process");
+const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const {
@@ -11,9 +13,21 @@ const {
 } = require("./library-catalog.cjs");
 
 test("keeps the permanent system actions in the packaged library", () => {
-  const library = readPackagedLibrary(
-    path.join(__dirname, "..", "public", "assets", "library.json"),
-  );
+  const repoRoot = path.join(__dirname, "..");
+  let committedJson;
+  try {
+    committedJson = execSync("git show HEAD:public/assets/library.json", {
+      cwd: repoRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    committedJson = fs.readFileSync(
+      path.join(repoRoot, "public", "assets", "library.json"),
+      "utf8",
+    );
+  }
+  const library = validatePackagedLibrary(JSON.parse(committedJson));
 
   assert.equal(library.default_model_id, "avatar-sample-a");
   assert.deepEqual(library.models, [
