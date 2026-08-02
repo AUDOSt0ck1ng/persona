@@ -5,6 +5,7 @@ import {
 } from './animation-catalog';
 
 export const SPEAKING_CHUNK_BASE_SECONDS = 0.9;
+export const SPEAKING_RESUME_HOLD_SECONDS = 0.7;
 // Provisional developer default; tune this after real voice-session testing.
 export const DEFAULT_BODY_TRANSITION_SECONDS = 0.35;
 export const DEFAULT_SPEAKING_TRANSITION: PersonaSpeakingTransitionSettings = {
@@ -71,23 +72,32 @@ export function nextSpeakingChunkUrl(
 }
 
 export function shouldAdvanceSpeakingSequence({
-  actionDuration,
-  actionTime,
   mixerTime,
   nextTransitionAt,
   speakingActive,
-  transitionDuration,
 }: {
-  actionDuration: number;
-  actionTime: number;
   mixerTime: number;
   nextTransitionAt: number;
   speakingActive: boolean;
-  transitionDuration: number;
 }): boolean {
-  return (
-    speakingActive &&
-    mixerTime >= nextTransitionAt &&
-    actionTime >= actionDuration - transitionDuration
+  return speakingActive && mixerTime >= nextTransitionAt;
+}
+
+export function speakingChunkDwellSeconds(
+  clipDuration: number,
+  transitionDuration: number,
+): number {
+  // Let each gesture establish itself before another random chunk is chosen.
+  // A long developer-configured blend must also have time to complete.
+  return Math.max(clipDuration, transitionDuration + 0.5);
+}
+
+export function holdSpeakingChunkAfterResume(
+  nextTransitionAt: number,
+  mixerTime: number,
+): number {
+  return Math.max(
+    nextTransitionAt,
+    mixerTime + SPEAKING_RESUME_HOLD_SECONDS,
   );
 }

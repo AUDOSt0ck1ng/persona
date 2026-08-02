@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  holdSpeakingChunkAfterResume,
   nextSpeakingChunkUrl,
+  speakingChunkDwellSeconds,
   speakingChunkBlendWeights,
   speakingChunkSequenceUrls,
   speakingChunkTransitionDurations,
@@ -103,11 +105,8 @@ describe('speaking motion chunks', () => {
 
   it('holds the selected speaking chunk while live audio is paused', () => {
     const readyToAdvance = {
-      actionDuration: 2,
-      actionTime: 1.8,
       mixerTime: 10,
       nextTransitionAt: 9,
-      transitionDuration: 0.5,
     };
 
     expect(
@@ -122,5 +121,15 @@ describe('speaking motion chunks', () => {
         speakingActive: true,
       }),
     ).toBe(true);
+  });
+
+  it('keeps the current chunk after speech resumes instead of switching immediately', () => {
+    expect(holdSpeakingChunkAfterResume(9, 10)).toBeCloseTo(10.7, 8);
+    expect(holdSpeakingChunkAfterResume(12, 10)).toBe(12);
+  });
+
+  it('gives a chunk enough dwell time to play and complete its blend', () => {
+    expect(speakingChunkDwellSeconds(2.4, 1.2)).toBe(2.4);
+    expect(speakingChunkDwellSeconds(1, 1.5)).toBe(2);
   });
 });

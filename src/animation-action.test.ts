@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import {
   configureAnimationAction,
+  configureSpeakingChunkAction,
   fadeAnimationActionSet,
 } from './animation-action';
 
@@ -25,6 +26,30 @@ describe('animation playback configuration', () => {
     expect(finishes).toBe(1);
     expect(action.loop).toBe(THREE.LoopOnce);
     expect(action.clampWhenFinished).toBe(true);
+  });
+
+  it('keeps a selected speaking chunk moving without snapping back to its first frame', () => {
+    const root = new THREE.Object3D();
+    const clip = new THREE.AnimationClip('speaking', 1, [
+      new THREE.VectorKeyframeTrack(
+        '.position',
+        [0, 1],
+        [0, 0, 0, 1, 0, 0],
+      ),
+    ]);
+    const mixer = new THREE.AnimationMixer(root);
+    const action = mixer.clipAction(clip);
+
+    configureSpeakingChunkAction(action).play();
+    mixer.update(1.25);
+    const firstPausedPose = root.position.x;
+    mixer.update(0.25);
+
+    expect(action.loop).toBe(THREE.LoopPingPong);
+    expect(action.clampWhenFinished).toBe(false);
+    expect(action.isRunning()).toBe(true);
+    expect(firstPausedPose).toBeCloseTo(0.75, 5);
+    expect(root.position.x).toBeCloseTo(0.5, 5);
   });
 
   it('keeps ordinary voice-driven body animations looping', () => {

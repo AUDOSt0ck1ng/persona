@@ -16,6 +16,17 @@ export function configureAnimationAction(
   return action;
 }
 
+export function configureSpeakingChunkAction(
+  action: THREE.AnimationAction,
+): THREE.AnimationAction {
+  // Speaking chunks are selected as short gestures rather than authored loops.
+  // Ping-pong keeps the selected gesture moving through a brief voice pause
+  // without either clamping at its last frame or snapping back to its first.
+  action.setLoop(THREE.LoopPingPong, Infinity);
+  action.clampWhenFinished = false;
+  return action;
+}
+
 export function fadeAnimationActionSet(
   outgoingActions: Iterable<THREE.AnimationAction>,
   next: THREE.AnimationAction,

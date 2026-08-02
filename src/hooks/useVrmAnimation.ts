@@ -13,11 +13,14 @@ import {
 } from '../animation-catalog';
 import {
   configureAnimationAction,
+  configureSpeakingChunkAction,
   fadeAnimationActionSet,
   type AnimationPlayback,
 } from '../animation-action';
 import {
   nextSpeakingChunkUrl,
+  holdSpeakingChunkAfterResume,
+  speakingChunkDwellSeconds,
   speakingChunkBlendWeights,
   speakingChunkSequenceUrls,
   speakingChunkTransitionDurations,
@@ -44,7 +47,6 @@ interface SpeakingSequence {
   generation: number;
   nextTransitionAt: number;
   previousUrl: string | null;
-  transitionDuration: number;
 }
 
 interface SpeakingBlend {
@@ -81,6 +83,7 @@ export function useVrmAnimation(
   const speakingTransitionRef = useRef(speakingTransition);
   const bodyTransitionSecondsRef = useRef(bodyTransitionSeconds);
   const speakingActiveRef = useRef(speakingActive);
+  const speakingWasActive = useRef(speakingActive);
   speakingTransitionRef.current = speakingTransition;
   bodyTransitionSecondsRef.current = bodyTransitionSeconds;
   speakingActiveRef.current = speakingActive;
@@ -114,6 +117,7 @@ export function useVrmAnimation(
       speakingBlend.current = null;
       fadingActionSet.clear();
       pendingTransitionActions.current = [];
+      speakingWasActive.current = speakingActiveRef.current;
       animationHistory.clear();
     };
   }, [vrm]);
@@ -205,7 +209,7 @@ export function useVrmAnimation(
             ? bodyTransitionSecondsRef.current
             : speakingDurations.total;
         action.reset();
-        configureAnimationAction(action, 'once');
+        configureSpeakingChunkAction(action);
         if (pendingActions.length > 0) {
           fadeTo(action, fadeSeconds, pendingActions);
           pendingTransitionActions.current = [];
@@ -228,8 +232,12 @@ export function useVrmAnimation(
         current.current = action;
         currentType.current = 'TALK';
         sequence.action = action;
-        sequence.nextTransitionAt = mixer.current.time + fadeSeconds;
-        sequence.transitionDuration = speakingDurations.total;
+        sequence.nextTransitionAt =
+          mixer.current.time +
+          speakingChunkDwellSeconds(
+            clip.duration,
+            speakingDurations.total,
+          );
         sequence.previousUrl = url;
         previousAnimation.current.set('TALK', url);
         sequence.advancing = false;
@@ -292,9 +300,6 @@ export function useVrmAnimation(
             generation,
             nextTransitionAt: 0,
             previousUrl: previousAnimation.current.get(type) ?? null,
-            transitionDuration: speakingChunkTransitionDurations(
-              speakingTransitionRef.current,
-            ).total,
           };
           await advanceSpeakingSequence(generation);
           return;
@@ -371,16 +376,23 @@ export function useVrmAnimation(
         }
       }
       const sequence = speakingSequence.current;
+      const speakingIsActive = speakingActiveRef.current;
+      if (speakingIsActive !== speakingWasActive.current) {
+        if (speakingIsActive && sequence && mixer.current) {
+          sequence.nextTransitionAt = holdSpeakingChunkAfterResume(
+            sequence.nextTransitionAt,
+            mixer.current.time,
+          );
+        }
+        speakingWasActive.current = speakingIsActive;
+      }
       if (
         sequence?.action &&
         !sequence.advancing &&
         shouldAdvanceSpeakingSequence({
-          actionDuration: sequence.action.getClip().duration,
-          actionTime: sequence.action.time,
           mixerTime: mixer.current?.time ?? 0,
           nextTransitionAt: sequence.nextTransitionAt,
-          speakingActive: speakingActiveRef.current,
-          transitionDuration: sequence.transitionDuration,
+          speakingActive: speakingIsActive,
         })
       ) {
         void advanceSpeakingSequence(sequence.generation);
