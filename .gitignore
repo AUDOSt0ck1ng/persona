@@ -16,6 +16,9 @@ coverage/
 # Local character media
 *.vrm
 *.vrma
+!public/assets/models/AvatarSample_A.vrm
+!public/assets/animations/idle.vrma
+!public/assets/animations/speaking-chunk*.vrma
 
 # Native compiler output
 *.dSYM/

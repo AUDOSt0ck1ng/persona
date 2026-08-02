@@ -39,13 +39,13 @@ Requirements:
 - npm
 - A desktop session with hardware-accelerated graphics
 
-The packaged character catalog is intentionally empty while the distributable
-defaults are being selected. Persona opens Settings on first launch so you can
-import a local `.vrm` model; ignored media files under `public/assets/` are not
-loaded unless they are declared in the catalog.
+Persona includes a default character model plus idle and speaking motion. You
+can replace the model or add more `.vrm` and `.vrma` files from Settings. Other
+ignored media under `public/assets/` is not loaded unless declared in the
+catalog.
 
 To exercise the packaged-library path with the current ignored local test
-media, copy the provided examples over the active empty catalogs:
+media, copy the provided examples over the active published catalogs:
 
 ```bash
 cp public/assets/library.json.example public/assets/library.json
@@ -155,11 +155,12 @@ self-test suite on Linux, Windows, and macOS. Prerelease tags shaped like
 `v0.1.0-beta.0` create native packages and a checksum file, but only after the
 asset release gate passes. See [Releasing](docs/RELEASING.md).
 
-## Replace the character assets before publishing
+## Character assets
 
-Character media is intentionally excluded from Git. Local test files must not
-be distributed. The packaged library is declared without a hard-coded filename
-contract in source code:
+The default model and published idle and speaking animations are declared in
+the packaged library. Other local character media remains excluded from Git
+and must not be distributed without documented permission. The catalog layout
+is:
 
 ```text
 public/assets/
@@ -179,8 +180,8 @@ and zero or more asset paths. The permanent `system-idle` and
 `system-speaking` records may have empty asset lists. Mirror every declared
 media path in `manifest.json`, then
 complete its license and source fields and set `distributionAllowed` to `true`.
-Remove the VRM and VRMA ignore rules only when the chosen files are safe to
-publish. The release workflow will fail closed until then. Read the
+Only explicitly allowlisted VRM or VRMA paths should be committed. The release
+workflow fails closed when the declared contract is incomplete. Read the
 [asset license terms](public/assets/LICENSES.md).
 
 ## Development

@@ -26,8 +26,23 @@
       "animation_trigger_scenario": "Used automatically while supported voice output is active.",
       "animation_type": "TALK",
       "asset_paths": [
-        "animations/talk1.vrma",
-        "animations/talk2.vrma"
+        "animations/speaking-chunk00.vrma",
+        "animations/speaking-chunk1.vrma",
+        "animations/speaking-chunk11.vrma",
+        "animations/speaking-chunk2.vrma",
+        "animations/speaking-chunk22.vrma",
+        "animations/speaking-chunk3.vrma",
+        "animations/speaking-chunk33.vrma",
+        "animations/speaking-chunk4.vrma",
+        "animations/speaking-chunk44.vrma",
+        "animations/speaking-chunk5.vrma",
+        "animations/speaking-chunk55.vrma",
+        "animations/speaking-chunk6.vrma",
+        "animations/speaking-chunk66.vrma",
+        "animations/speaking-chunk7.vrma",
+        "animations/speaking-chunk77.vrma",
+        "animations/speaking-chunk8.vrma",
+        "animations/speaking-chunk88.vrma"
       ]
     },
     {

@@ -94,6 +94,35 @@ test("manifest assigns every catalog asset its intended generic role", () => {
   );
 });
 
+test("published character assets carry licenses separate from the project MIT license", () => {
+  const assetRoot = path.join(__dirname, "..", "public", "assets");
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(assetRoot, "manifest.json"), "utf8"),
+  );
+
+  assert.equal(manifest.distributionAllowed, true);
+  assert.ok(manifest.assets.length > 0);
+  const model = manifest.assets.find((asset) => asset.role === "model");
+  const animations = manifest.assets.filter((asset) => asset.role === "animation");
+  assert.deepEqual(model, {
+    path: "models/AvatarSample_A.vrm",
+    role: "model",
+    license:
+      "VRoid Project Sample Model Terms; excluded from Persona's MIT License",
+    source:
+      "https://hub.vroid.com/en/characters/2843975675147313744/models/5644550979324015604",
+  });
+  assert.ok(animations.length > 0);
+  assert.ok(
+    animations.every(
+      (asset) =>
+        asset.license === "Excluded from Persona's MIT License" &&
+        typeof asset.source === "string" &&
+        asset.source.length > 0,
+    ),
+  );
+});
+
 test("example manifest covers every path in the example library", () => {
   const assetRoot = path.join(__dirname, "..", "public", "assets");
   const contract = readAssetContract(
@@ -128,7 +157,14 @@ test("development rejects a partial local media set", (context) => {
   );
 });
 
-test("test-only assets are rejected by the release gate", () => {
-  const errors = validateAssets({ release: true });
+test("test-only assets are rejected by the release gate", (context) => {
+  const fixture = createFixture(context);
+  configureFixtureAssets(fixture);
+  for (const relative of ["models/configured.vrm", "animations/configured.vrma"]) {
+    const absolute = path.join(fixture.assetRoot, relative);
+    fs.mkdirSync(path.dirname(absolute), { recursive: true });
+    fs.writeFileSync(absolute, "local test media");
+  }
+  const errors = validateAssets({ ...fixture, release: true });
   assert.ok(errors.some((error) => error.includes("distribution is disabled")));
 });

@@ -1,7 +1,6 @@
 "use strict";
 
 const assert = require("node:assert/strict");
-const { execSync } = require("node:child_process");
 const path = require("node:path");
 const test = require("node:test");
 const {
@@ -11,27 +10,19 @@ const {
   validatePackagedLibrary,
 } = require("./library-catalog.cjs");
 
-test("keeps permanent empty system actions in the packaged library", () => {
-  // Read the committed blob so the guard survives local uncommitted edits
-  // (e.g. the documented `cp library.json.example library.json` setup step).
-  const repoRoot = path.join(__dirname, "..");
-  let committedJson;
-  try {
-    committedJson = execSync(
-      "git show HEAD:public/assets/library.json",
-      { cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
-    );
-  } catch {
-    // Not in a git repo or file not tracked — fall back to disk.
-    committedJson = require("node:fs").readFileSync(
-      path.join(repoRoot, "public", "assets", "library.json"),
-      "utf8",
-    );
-  }
-  const library = validatePackagedLibrary(JSON.parse(committedJson));
+test("keeps the permanent system actions in the packaged library", () => {
+  const library = readPackagedLibrary(
+    path.join(__dirname, "..", "public", "assets", "library.json"),
+  );
 
-  assert.equal(library.default_model_id, null);
-  assert.deepEqual(library.models, []);
+  assert.equal(library.default_model_id, "avatar-sample-a");
+  assert.deepEqual(library.models, [
+    {
+      asset_path: "models/AvatarSample_A.vrm",
+      id: "avatar-sample-a",
+      model_name: "AvatarSample_A",
+    },
+  ]);
   assert.deepEqual(
     library.animations.map(
       ({ id, animation_name, animation_type, asset_paths }) => ({
@@ -46,13 +37,31 @@ test("keeps permanent empty system actions in the packaged library", () => {
         id: "system-idle",
         animation_name: "idle",
         animation_type: "IDLE",
-        asset_paths: [],
+        asset_paths: ["animations/idle.vrma"],
       },
       {
         id: "system-speaking",
         animation_name: "speaking",
         animation_type: "TALK",
-        asset_paths: [],
+        asset_paths: [
+          "animations/speaking-chunk00.vrma",
+          "animations/speaking-chunk1.vrma",
+          "animations/speaking-chunk11.vrma",
+          "animations/speaking-chunk2.vrma",
+          "animations/speaking-chunk22.vrma",
+          "animations/speaking-chunk3.vrma",
+          "animations/speaking-chunk33.vrma",
+          "animations/speaking-chunk4.vrma",
+          "animations/speaking-chunk44.vrma",
+          "animations/speaking-chunk5.vrma",
+          "animations/speaking-chunk55.vrma",
+          "animations/speaking-chunk6.vrma",
+          "animations/speaking-chunk66.vrma",
+          "animations/speaking-chunk7.vrma",
+          "animations/speaking-chunk77.vrma",
+          "animations/speaking-chunk8.vrma",
+          "animations/speaking-chunk88.vrma",
+        ],
       },
     ],
   );
