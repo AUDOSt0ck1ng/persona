@@ -27,7 +27,10 @@ const INITIAL_STATE: VoiceState = {
   phase: 'inactive',
 };
 
-const BODY_IDLE_DELAY_MS = 250;
+// Keep body motion speaking through normal sentence gaps. Lip sync still
+// follows the live amplitude immediately; this delay only controls when the
+// body is allowed to leave the speaking animation.
+const BODY_IDLE_DELAY_MS = 900;
 
 export function App() {
   const [voice, setVoice] = useState<VoiceState>(INITIAL_STATE);

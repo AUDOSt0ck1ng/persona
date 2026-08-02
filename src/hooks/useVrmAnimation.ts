@@ -82,6 +82,7 @@ export function useVrmAnimation(
   const pendingCompletion = useRef<PendingCompletion | null>(null);
   const speakingSequence = useRef<SpeakingSequence | null>(null);
   const speakingBlend = useRef<SpeakingBlend | null>(null);
+  const deferredIdleTimer = useRef<number | null>(null);
   const speakingTransitionRef = useRef(speakingTransition);
   speakingTransitionRef.current = speakingTransition;
 
@@ -111,6 +112,10 @@ export function useVrmAnimation(
       pendingCompletion.current = null;
       speakingSequence.current = null;
       speakingBlend.current = null;
+      if (deferredIdleTimer.current != null) {
+        window.clearTimeout(deferredIdleTimer.current);
+        deferredIdleTimer.current = null;
+      }
       animationHistory.clear();
     };
   }, [vrm]);
@@ -238,14 +243,38 @@ export function useVrmAnimation(
         if (playback === 'once') onComplete?.();
         return;
       }
+      const activeBlend = speakingBlend.current;
+      if (type === 'IDLE' && activeBlend) {
+        // A live pause can arrive while two speaking chunks are crossfading.
+        // Let that blend finish before starting idle; stopping one action and
+        // forcing the other to weight 1 creates a visible pose discontinuity.
+        if (deferredIdleTimer.current != null) {
+          window.clearTimeout(deferredIdleTimer.current);
+        }
+        speakingSequence.current = null;
+        requestGeneration.current += 1;
+        pendingCompletion.current = null;
+        const elapsed = mixer.current.time - activeBlend.startedAt;
+        const remaining = Math.max(0, activeBlend.duration - elapsed);
+        deferredIdleTimer.current = window.setTimeout(() => {
+          deferredIdleTimer.current = null;
+          void play('IDLE', { animationUrls, onComplete, playback });
+        // Give the render loop a frame to clear the blend before retrying.
+        }, Math.ceil(remaining * 1000) + 20);
+        return;
+      }
+      if (deferredIdleTimer.current != null) {
+        window.clearTimeout(deferredIdleTimer.current);
+        deferredIdleTimer.current = null;
+      }
       const generation = ++requestGeneration.current;
       pendingCompletion.current = null;
       speakingSequence.current = null;
-      const activeBlend = speakingBlend.current;
-      if (activeBlend) {
-        activeBlend.outgoing.stop();
-        activeBlend.incoming.stopFading().setEffectiveWeight(1);
-        current.current = activeBlend.incoming;
+      const currentBlend = speakingBlend.current;
+      if (currentBlend) {
+        currentBlend.outgoing.stop();
+        currentBlend.incoming.stopFading().setEffectiveWeight(1);
+        current.current = currentBlend.incoming;
         speakingBlend.current = null;
       }
       try {
