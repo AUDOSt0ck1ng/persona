@@ -16,11 +16,16 @@ export function configureAnimationAction(
   return action;
 }
 
-export function crossFadeAnimationActions(
-  previous: THREE.AnimationAction | null,
+export function fadeAnimationActionSet(
+  outgoingActions: Iterable<THREE.AnimationAction>,
   next: THREE.AnimationAction,
   duration: number,
-): void {
-  previous?.fadeOut(duration);
-  next.setEffectiveWeight(1).fadeIn(duration).play();
+): Set<THREE.AnimationAction> {
+  const fading = new Set(outgoingActions);
+  fading.delete(next);
+  for (const action of fading) {
+    action.stopFading().fadeOut(duration);
+  }
+  next.stopFading().setEffectiveWeight(1).fadeIn(duration).play();
+  return fading;
 }

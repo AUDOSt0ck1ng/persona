@@ -1,11 +1,14 @@
-import { Suspense, useEffect, useLayoutEffect } from 'react';
+import { Suspense, useEffect, useLayoutEffect, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import type * as THREE from 'three';
 import { useVrmLoader } from '../hooks/useVrmLoader';
 import { useVrmAnimation } from '../hooks/useVrmAnimation';
 import { useAmplitudeLipSync } from '../hooks/useAmplitudeLipSync';
 import { useBlink } from '../hooks/useBlink';
-import type { PlayableAnimationType } from '../animation-catalog';
+import {
+  animationUrlSignature,
+  type PlayableAnimationType,
+} from '../animation-catalog';
 
 interface AvatarProps {
   animation: PlayableAnimationType;
@@ -15,6 +18,7 @@ interface AvatarProps {
   modelUrl: string;
   onAnimationComplete: () => void;
   playback: 'loop' | 'once';
+  speakingMotionActive: boolean;
   speaking: boolean;
   bodyTransitionSeconds: number;
   speakingTransition: PersonaSpeakingTransitionSettings;
@@ -29,6 +33,7 @@ function AvatarModel({
   modelUrl,
   onAnimationComplete,
   playback,
+  speakingMotionActive,
   speaking,
   bodyTransitionSeconds,
   speakingTransition,
@@ -39,23 +44,30 @@ function AvatarModel({
     vrm,
     speakingTransition,
     bodyTransitionSeconds,
+    speakingMotionActive,
   );
   const updateLipSync = useAmplitudeLipSync(vrm);
   const updateBlink = useBlink(vrm);
 
+  const animationUrlsKey = animationUrlSignature(animationUrls);
+  const stableAnimationUrls = useMemo(
+    () => JSON.parse(animationUrlsKey) as string[],
+    [animationUrlsKey],
+  );
+
   useEffect(() => {
     void play(animation, {
-      animationUrls,
+      animationUrls: stableAnimationUrls,
       onComplete: onAnimationComplete,
       playback,
     });
   }, [
     animation,
     animationRequest,
-    animationUrls,
     onAnimationComplete,
     play,
     playback,
+    stableAnimationUrls,
   ]);
 
   useLayoutEffect(() => {

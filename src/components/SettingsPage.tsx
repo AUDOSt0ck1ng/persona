@@ -2558,7 +2558,8 @@ export function SettingsPage() {
                     setPreviewClipId(null);
                   }}
                   playback={previewClip ? 'once' : 'loop'}
-                  speaking={false}
+                  speakingMotionActive={previewType === 'TALK'}
+                  speaking={previewType === 'TALK'}
                   bodyTransitionSeconds={settings.body_transition_seconds}
                   speakingTransition={settings.speaking_transition}
                 />

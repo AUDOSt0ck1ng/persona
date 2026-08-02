@@ -13,7 +13,7 @@ import {
 } from '../animation-catalog';
 import {
   configureAnimationAction,
-  crossFadeAnimationActions,
+  fadeAnimationActionSet,
   type AnimationPlayback,
 } from '../animation-action';
 import {
@@ -21,6 +21,7 @@ import {
   speakingChunkBlendWeights,
   speakingChunkSequenceUrls,
   speakingChunkTransitionDurations,
+  shouldAdvanceSpeakingSequence,
 } from '../speaking-chunks';
 
 interface PlayOptions {
@@ -55,18 +56,11 @@ interface SpeakingBlend {
   startedAt: number;
 }
 
-function transitionSeconds(
-  next: PlayableAnimationType,
-  bodyTransitionSeconds: number,
-): number {
-  if (next === 'TALK') return 0.85;
-  return bodyTransitionSeconds;
-}
-
 export function useVrmAnimation(
   vrm: VRM | null,
   speakingTransition: PersonaSpeakingTransitionSettings,
   bodyTransitionSeconds: number,
+  speakingActive: boolean,
 ) {
   const mixer = useRef<THREE.AnimationMixer | null>(null);
   const current = useRef<THREE.AnimationAction | null>(null);
@@ -82,13 +76,19 @@ export function useVrmAnimation(
   const pendingCompletion = useRef<PendingCompletion | null>(null);
   const speakingSequence = useRef<SpeakingSequence | null>(null);
   const speakingBlend = useRef<SpeakingBlend | null>(null);
-  const deferredIdleTimer = useRef<number | null>(null);
+  const fadingActions = useRef(new Set<THREE.AnimationAction>());
+  const pendingTransitionActions = useRef<THREE.AnimationAction[]>([]);
   const speakingTransitionRef = useRef(speakingTransition);
+  const bodyTransitionSecondsRef = useRef(bodyTransitionSeconds);
+  const speakingActiveRef = useRef(speakingActive);
   speakingTransitionRef.current = speakingTransition;
+  bodyTransitionSecondsRef.current = bodyTransitionSeconds;
+  speakingActiveRef.current = speakingActive;
 
   useEffect(() => {
     if (!vrm) return;
     const animationHistory = previousAnimation.current;
+    const fadingActionSet = fadingActions.current;
     const animationMixer = new THREE.AnimationMixer(vrm.scene);
     const handleFinished = ({ action }: { action: THREE.AnimationAction }) => {
       const pending = pendingCompletion.current;
@@ -112,10 +112,8 @@ export function useVrmAnimation(
       pendingCompletion.current = null;
       speakingSequence.current = null;
       speakingBlend.current = null;
-      if (deferredIdleTimer.current != null) {
-        window.clearTimeout(deferredIdleTimer.current);
-        deferredIdleTimer.current = null;
-      }
+      fadingActionSet.clear();
+      pendingTransitionActions.current = [];
       animationHistory.clear();
     };
   }, [vrm]);
@@ -148,6 +146,24 @@ export function useVrmAnimation(
       return clip;
     },
     [load, vrm],
+  );
+
+  const fadeTo = useCallback(
+    (
+      next: THREE.AnimationAction,
+      duration: number,
+      additionalOutgoing: readonly THREE.AnimationAction[] = [],
+    ) => {
+      const outgoing = new Set([
+        ...fadingActions.current,
+        ...additionalOutgoing,
+      ]);
+      if (current.current) outgoing.add(current.current);
+      const fading = fadeAnimationActionSet(outgoing, next, duration);
+      for (const action of fading) fadingActions.current.add(action);
+      fadingActions.current.delete(next);
+    },
+    [],
   );
 
   const advanceSpeakingSequence = useCallback(
@@ -183,16 +199,17 @@ export function useVrmAnimation(
         const speakingDurations = speakingChunkTransitionDurations(
           speakingTransitionRef.current,
         );
+        const pendingActions = pendingTransitionActions.current;
         const fadeSeconds =
-          currentType.current === 'TALK'
-            ? speakingDurations.total
-            : transitionSeconds(
-                'TALK',
-                bodyTransitionSeconds,
-              );
+          pendingActions.length > 0 || currentType.current !== 'TALK'
+            ? bodyTransitionSecondsRef.current
+            : speakingDurations.total;
         action.reset();
         configureAnimationAction(action, 'once');
-        if (current.current === action) {
+        if (pendingActions.length > 0) {
+          fadeTo(action, fadeSeconds, pendingActions);
+          pendingTransitionActions.current = [];
+        } else if (current.current === action) {
           action.setEffectiveWeight(1).play();
         } else if (currentType.current === 'TALK' && current.current) {
           current.current.stopFading().setEffectiveWeight(1);
@@ -206,7 +223,7 @@ export function useVrmAnimation(
             startedAt: mixer.current.time,
           };
         } else {
-          crossFadeAnimationActions(current.current, action, fadeSeconds);
+          fadeTo(action, fadeSeconds);
         }
         current.current = action;
         currentType.current = 'TALK';
@@ -230,7 +247,7 @@ export function useVrmAnimation(
         }
       }
     },
-    [bodyTransitionSeconds, loadClip, vrm],
+    [fadeTo, loadClip, vrm],
   );
 
   const play = useCallback(
@@ -246,40 +263,20 @@ export function useVrmAnimation(
         if (playback === 'once') onComplete?.();
         return;
       }
-      const activeBlend = speakingBlend.current;
-      if (type === 'IDLE' && activeBlend) {
-        // A live pause can arrive while two speaking chunks are crossfading.
-        // Let that blend finish before starting idle; stopping one action and
-        // forcing the other to weight 1 creates a visible pose discontinuity.
-        if (deferredIdleTimer.current != null) {
-          window.clearTimeout(deferredIdleTimer.current);
-        }
-        speakingSequence.current = null;
-        requestGeneration.current += 1;
-        pendingCompletion.current = null;
-        const elapsed = mixer.current.time - activeBlend.startedAt;
-        const remaining = Math.max(0, activeBlend.duration - elapsed);
-        deferredIdleTimer.current = window.setTimeout(() => {
-          deferredIdleTimer.current = null;
-          void play('IDLE', { animationUrls, onComplete, playback });
-        // Give the render loop a frame to clear the blend before retrying.
-        }, Math.ceil(remaining * 1000) + 20);
-        return;
-      }
-      if (deferredIdleTimer.current != null) {
-        window.clearTimeout(deferredIdleTimer.current);
-        deferredIdleTimer.current = null;
-      }
       const generation = ++requestGeneration.current;
       pendingCompletion.current = null;
       speakingSequence.current = null;
-      const currentBlend = speakingBlend.current;
-      if (currentBlend) {
-        currentBlend.outgoing.stop();
-        currentBlend.incoming.stopFading().setEffectiveWeight(1);
-        current.current = currentBlend.incoming;
-        speakingBlend.current = null;
+      const interruptedBlend = speakingBlend.current;
+      if (interruptedBlend) {
+        pendingTransitionActions.current = [
+          ...new Set([
+            ...pendingTransitionActions.current,
+            interruptedBlend.outgoing,
+            interruptedBlend.incoming,
+          ]),
+        ];
       }
+      speakingBlend.current = null;
       try {
         const sequenceUrls = speakingChunkSequenceUrls(
           type,
@@ -308,11 +305,17 @@ export function useVrmAnimation(
           previousAnimation.current.get(type) ?? null,
         );
         if (!url) {
-          const fadeSeconds = transitionSeconds(
-            type,
-            bodyTransitionSeconds,
-          );
-          current.current?.fadeOut(fadeSeconds);
+          const fadeSeconds = bodyTransitionSecondsRef.current;
+          const outgoing = new Set([
+            ...fadingActions.current,
+            ...pendingTransitionActions.current,
+          ]);
+          if (current.current) outgoing.add(current.current);
+          for (const action of outgoing) {
+            action.stopFading().fadeOut(fadeSeconds);
+            fadingActions.current.add(action);
+          }
+          pendingTransitionActions.current = [];
           current.current = null;
           currentType.current = type;
           if (playback === 'once') onComplete?.();
@@ -322,10 +325,7 @@ export function useVrmAnimation(
         const clip = await loadClip(url);
         if (generation !== requestGeneration.current || !mixer.current) return;
         const action = mixer.current.clipAction(clip);
-        const fadeSeconds = transitionSeconds(
-          type,
-          bodyTransitionSeconds,
-        );
+        const fadeSeconds = bodyTransitionSecondsRef.current;
         action.reset();
         configureAnimationAction(action, playback);
         if (playback === 'once') {
@@ -337,7 +337,8 @@ export function useVrmAnimation(
             };
           }
         }
-        crossFadeAnimationActions(current.current, action, fadeSeconds);
+        fadeTo(action, fadeSeconds, pendingTransitionActions.current);
+        pendingTransitionActions.current = [];
         current.current = action;
         currentType.current = type;
       } catch (error) {
@@ -347,7 +348,7 @@ export function useVrmAnimation(
         }
       }
     },
-    [advanceSpeakingSequence, bodyTransitionSeconds, loadClip, vrm],
+    [advanceSpeakingSequence, fadeTo, loadClip, vrm],
   );
 
   const update = useCallback(
@@ -373,12 +374,22 @@ export function useVrmAnimation(
       if (
         sequence?.action &&
         !sequence.advancing &&
-        (mixer.current?.time ?? 0) >= sequence.nextTransitionAt &&
-          sequence.action.time >=
-          sequence.action.getClip().duration -
-            sequence.transitionDuration
+        shouldAdvanceSpeakingSequence({
+          actionDuration: sequence.action.getClip().duration,
+          actionTime: sequence.action.time,
+          mixerTime: mixer.current?.time ?? 0,
+          nextTransitionAt: sequence.nextTransitionAt,
+          speakingActive: speakingActiveRef.current,
+          transitionDuration: sequence.transitionDuration,
+        })
       ) {
         void advanceSpeakingSequence(sequence.generation);
+      }
+      for (const action of fadingActions.current) {
+        if (action.getEffectiveWeight() <= 0.001) {
+          action.stop();
+          fadingActions.current.delete(action);
+        }
       }
     },
     [advanceSpeakingSequence],

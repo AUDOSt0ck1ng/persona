@@ -25,6 +25,7 @@ interface SceneProps {
   modelUrl: string;
   onAnimationComplete: () => void;
   playback: 'loop' | 'once';
+  speakingMotionActive: boolean;
   speaking: boolean;
   bodyTransitionSeconds: number;
   speakingTransition: PersonaSpeakingTransitionSettings;

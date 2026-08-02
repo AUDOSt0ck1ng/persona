@@ -69,3 +69,25 @@ export function nextSpeakingChunkUrl(
     random,
   );
 }
+
+export function shouldAdvanceSpeakingSequence({
+  actionDuration,
+  actionTime,
+  mixerTime,
+  nextTransitionAt,
+  speakingActive,
+  transitionDuration,
+}: {
+  actionDuration: number;
+  actionTime: number;
+  mixerTime: number;
+  nextTransitionAt: number;
+  speakingActive: boolean;
+  transitionDuration: number;
+}): boolean {
+  return (
+    speakingActive &&
+    mixerTime >= nextTransitionAt &&
+    actionTime >= actionDuration - transitionDuration
+  );
+}

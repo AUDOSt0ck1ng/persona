@@ -4,6 +4,7 @@ import {
   speakingChunkBlendWeights,
   speakingChunkSequenceUrls,
   speakingChunkTransitionDurations,
+  shouldAdvanceSpeakingSequence,
 } from './speaking-chunks';
 
 describe('speaking motion chunks', () => {
@@ -98,5 +99,28 @@ describe('speaking motion chunks', () => {
     expect(durations.entry).toBeCloseTo(0.675, 8);
     expect(durations.exit).toBeCloseTo(0.81, 8);
     expect(durations.total).toBeCloseTo(1.485, 8);
+  });
+
+  it('holds the selected speaking chunk while live audio is paused', () => {
+    const readyToAdvance = {
+      actionDuration: 2,
+      actionTime: 1.8,
+      mixerTime: 10,
+      nextTransitionAt: 9,
+      transitionDuration: 0.5,
+    };
+
+    expect(
+      shouldAdvanceSpeakingSequence({
+        ...readyToAdvance,
+        speakingActive: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAdvanceSpeakingSequence({
+        ...readyToAdvance,
+        speakingActive: true,
+      }),
+    ).toBe(true);
   });
 });
