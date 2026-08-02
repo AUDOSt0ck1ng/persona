@@ -1,6 +1,121 @@
 {
   "schemaVersion": 1,
-  "distributionAllowed": false,
-  "notice": "Character media is intentionally not committed. Add redistributable files and complete all license metadata before publishing Persona.",
-  "assets": []
+  "distributionAllowed": true,
+  "notice": "These character assets are distributed with Persona but are excluded from the project's MIT License. Refer to public/assets/LICENSES.md for their separate terms.",
+  "assets": [
+    {
+      "path": "models/AvatarSample_A.vrm",
+      "role": "model",
+      "license": "VRoid Project Sample Model Terms; excluded from Persona's MIT License",
+      "source": "https://hub.vroid.com/en/characters/2843975675147313744/models/5644550979324015604"
+    },
+    {
+      "path": "animations/idle.vrma",
+      "role": "animation",
+      "license": "Excluded from Persona's MIT License",
+      "source": "https://github.com/xikhar/persona/tree/main/public/assets/animations"
+    },
+    {
+      "path": "animations/speaking-chunk00.vrma",
+      "role": "animation",
+      "license": "Excluded from Persona's MIT License",
+      "source": "https://github.com/xikhar/persona/tree/main/public/assets/animations"
+    },
+    {
+      "path": "animations/speaking-chunk1.vrma",
+      "role": "animation",
+      "license": "Excluded from Persona's MIT License",
+      "source": "https://github.com/xikhar/persona/tree/main/public/assets/animations"
+    },
+    {
+      "path": "animations/speaking-chunk11.vrma",
+      "role": "animation",
+      "license": "Excluded from Persona's MIT License",
+      "source": "https://github.com/xikhar/persona/tree/main/public/assets/animations"
+    },
+    {
+      "path": "animations/speaking-chunk2.vrma",
+      "role": "animation",
+      "license": "Excluded from Persona's MIT License",
+      "source": "https://github.com/xikhar/persona/tree/main/public/assets/animations"
+    },
+    {
+      "path": "animations/speaking-chunk22.vrma",
+      "role": "animation",
+      "license": "Excluded from Persona's MIT License",
+      "source": "https://github.com/xikhar/persona/tree/main/public/assets/animations"
+    },
+    {
+      "path": "animations/speaking-chunk3.vrma",
+      "role": "animation",
+      "license": "Excluded from Persona's MIT License",
+      "source": "https://github.com/xikhar/persona/tree/main/public/assets/animations"
+    },
+    {
+      "path": "animations/speaking-chunk33.vrma",
+      "role": "animation",
+      "license": "Excluded from Persona's MIT License",
+      "source": "https://github.com/xikhar/persona/tree/main/public/assets/animations"
+    },
+    {
+      "path": "animations/speaking-chunk4.vrma",
+      "role": "animation",
+      "license": "Excluded from Persona's MIT License",
+      "source": "https://github.com/xikhar/persona/tree/main/public/assets/animations"
+    },
+    {
+      "path": "animations/speaking-chunk44.vrma",
+      "role": "animation",
+      "license": "Excluded from Persona's MIT License",
+      "source": "https://github.com/xikhar/persona/tree/main/public/assets/animations"
+    },
+    {
+      "path": "animations/speaking-chunk5.vrma",
+      "role": "animation",
+      "license": "Excluded from Persona's MIT License",
+      "source": "https://github.com/xikhar/persona/tree/main/public/assets/animations"
+    },
+    {
+      "path": "animations/speaking-chunk55.vrma",
+      "role": "animation",
+      "license": "Excluded from Persona's MIT License",
+      "source": "https://github.com/xikhar/persona/tree/main/public/assets/animations"
+    },
+    {
+      "path": "animations/speaking-chunk6.vrma",
+      "role": "animation",
+      "license": "Excluded from Persona's MIT License",
+      "source": "https://github.com/xikhar/persona/tree/main/public/assets/animations"
+    },
+    {
+      "path": "animations/speaking-chunk66.vrma",
+      "role": "animation",
+      "license": "Excluded from Persona's MIT License",
+      "source": "https://github.com/xikhar/persona/tree/main/public/assets/animations"
+    },
+    {
+      "path": "animations/speaking-chunk7.vrma",
+      "role": "animation",
+      "license": "Excluded from Persona's MIT License",
+      "source": "https://github.com/xikhar/persona/tree/main/public/assets/animations"
+    },
+    {
+      "path": "animations/speaking-chunk77.vrma",
+      "role": "animation",
+      "license": "Excluded from Persona's MIT License",
+      "source": "https://github.com/xikhar/persona/tree/main/public/assets/animations"
+    },
+    {
+      "path": "animations/speaking-chunk8.vrma",
+      "role": "animation",
+      "license": "Excluded from Persona's MIT License",
+      "source": "https://github.com/xikhar/persona/tree/main/public/assets/animations"
+    },
+    {
+      "path": "animations/speaking-chunk88.vrma",
+      "role": "animation",
+      "license": "Excluded from Persona's MIT License",
+      "source": "https://github.com/xikhar/persona/tree/main/public/assets/animations"
+    }
+  ]
 }

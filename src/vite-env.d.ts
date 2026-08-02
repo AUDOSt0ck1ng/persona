@@ -30,6 +30,11 @@ interface PersonaLightingSettings {
   ambient_intensity: number;
 }
 
+interface PersonaSpeakingTransitionSettings {
+  entry_factor: readonly [number, number];
+  exit_factor: readonly [number, number];
+}
+
 type PersonaAnimationType =
   | 'IDLE'
   | 'GREETING'
@@ -95,6 +100,9 @@ interface PersonaSettingsSnapshot {
   schema_version: number;
   default_model_id: string | null;
   character_size: number;
+  developer_settings_enabled: boolean;
+  body_transition_seconds: number;
+  speaking_transition: PersonaSpeakingTransitionSettings;
   packaged_animation_change_count: number;
   models: PersonaModelSettings[];
   animations: PersonaAnimationSettings[];
@@ -166,6 +174,12 @@ interface Window {
     deleteModel(modelId: string): Promise<PersonaSettingsSnapshot>;
     setDefaultModel(modelId: string): Promise<PersonaSettingsSnapshot>;
     setCharacterSize(size: number): Promise<PersonaSettingsSnapshot>;
+    setSpeakingTransition(
+      transition: PersonaSpeakingTransitionSettings,
+    ): Promise<PersonaSettingsSnapshot>;
+    setBodyTransitionSeconds(seconds: number): Promise<PersonaSettingsSnapshot>;
+    enableDeveloperSettings(): Promise<PersonaSettingsSnapshot>;
+    resetDeveloperSettings(): Promise<PersonaSettingsSnapshot>;
     setVoiceSource(
       voiceSource: PersonaVoiceSourceSettings,
     ): Promise<PersonaSettingsSnapshot>;

@@ -1,6 +1,6 @@
 "use strict";
 
-const DEFAULT_SPEECH_RELEASE_MS = 900;
+const DEFAULT_SPEECH_RELEASE_MS = 250;
 const DEFAULT_SPEECH_THRESHOLD = 0.018;
 
 class AudioActivityGate {

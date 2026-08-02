@@ -27,11 +27,15 @@ const INITIAL_STATE: VoiceState = {
   phase: 'inactive',
 };
 
-const BODY_IDLE_DELAY_MS = 650;
+// Keep body motion speaking through normal sentence gaps. Lip sync still
+// follows the live amplitude immediately; this delay only controls when the
+// body is allowed to leave the speaking animation.
+const BODY_IDLE_DELAY_MS = 900;
 
 export function App() {
   const [voice, setVoice] = useState<VoiceState>(INITIAL_STATE);
   const [audioLevel, setAudioLevel] = useState(0);
+  const [hasObservedAudioLevel, setHasObservedAudioLevel] = useState(false);
   const [voiceAnimation, setVoiceAnimation] = useState<AnimationType>('IDLE');
   const [bodyOverride, setBodyOverride] =
     useState<BodyAnimationOverride | null>(null);
@@ -47,8 +51,12 @@ export function App() {
     return bridge.subscribe((event) => {
       if (event.type === 'state') {
         setVoice(event.state);
+        if (event.state.phase === 'inactive') {
+          setHasObservedAudioLevel(false);
+        }
       } else if (event.type === 'audio-level') {
         setAudioLevel(event.level);
+        setHasObservedAudioLevel(true);
       } else if (event.type === 'animation') {
         if (event.requestId != null) {
           setBodyOverride({
@@ -78,6 +86,8 @@ export function App() {
     voice.phase === 'active' &&
     voice.activity === 'speaking' &&
     !voice.outputMuted;
+  const speakingMotionActive =
+    speaking && (!hasObservedAudioLevel || audioLevel > 0);
 
   useEffect(() => {
     const immediateAnimation = immediateVoiceAnimation(voice);
@@ -128,7 +138,10 @@ export function App() {
         modelUrl={defaultModel.asset_url}
         onAnimationComplete={handleAnimationComplete}
         playback={bodyOverride ? 'once' : 'loop'}
+        speakingMotionActive={speakingMotionActive}
         speaking={speaking}
+        bodyTransitionSeconds={settings.body_transition_seconds}
+        speakingTransition={settings.speaking_transition}
       />
     </main>
   ) : (

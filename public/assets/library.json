@@ -1,7 +1,13 @@
 {
   "schema_version": 1,
-  "default_model_id": null,
-  "models": [],
+  "default_model_id": "avatar-sample-a",
+  "models": [
+    {
+      "id": "avatar-sample-a",
+      "model_name": "AvatarSample_A",
+      "asset_path": "models/AvatarSample_A.vrm"
+    }
+  ],
   "animations": [
     {
       "id": "system-idle",
@@ -9,7 +15,9 @@
       "animation_description": "A calm resting motion for the character.",
       "animation_trigger_scenario": "Used automatically while Persona is waiting and not speaking.",
       "animation_type": "IDLE",
-      "asset_paths": []
+      "asset_paths": [
+        "animations/idle.vrma"
+      ]
     },
     {
       "id": "system-speaking",
@@ -17,7 +25,25 @@
       "animation_description": "Natural conversational body movement while the character speaks.",
       "animation_trigger_scenario": "Used automatically while supported voice output is active.",
       "animation_type": "TALK",
-      "asset_paths": []
+      "asset_paths": [
+        "animations/speaking-chunk00.vrma",
+        "animations/speaking-chunk1.vrma",
+        "animations/speaking-chunk11.vrma",
+        "animations/speaking-chunk2.vrma",
+        "animations/speaking-chunk22.vrma",
+        "animations/speaking-chunk3.vrma",
+        "animations/speaking-chunk33.vrma",
+        "animations/speaking-chunk4.vrma",
+        "animations/speaking-chunk44.vrma",
+        "animations/speaking-chunk5.vrma",
+        "animations/speaking-chunk55.vrma",
+        "animations/speaking-chunk6.vrma",
+        "animations/speaking-chunk66.vrma",
+        "animations/speaking-chunk7.vrma",
+        "animations/speaking-chunk77.vrma",
+        "animations/speaking-chunk8.vrma",
+        "animations/speaking-chunk88.vrma"
+      ]
     }
   ]
 }

@@ -16,13 +16,103 @@
       "source": null
     },
     {
-      "path": "animations/talk1.vrma",
+      "path": "animations/speaking-chunk00.vrma",
       "role": "animation",
       "license": null,
       "source": null
     },
     {
-      "path": "animations/talk2.vrma",
+      "path": "animations/speaking-chunk1.vrma",
+      "role": "animation",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/speaking-chunk11.vrma",
+      "role": "animation",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/speaking-chunk2.vrma",
+      "role": "animation",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/speaking-chunk22.vrma",
+      "role": "animation",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/speaking-chunk3.vrma",
+      "role": "animation",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/speaking-chunk33.vrma",
+      "role": "animation",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/speaking-chunk4.vrma",
+      "role": "animation",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/speaking-chunk44.vrma",
+      "role": "animation",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/speaking-chunk5.vrma",
+      "role": "animation",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/speaking-chunk55.vrma",
+      "role": "animation",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/speaking-chunk6.vrma",
+      "role": "animation",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/speaking-chunk66.vrma",
+      "role": "animation",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/speaking-chunk7.vrma",
+      "role": "animation",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/speaking-chunk77.vrma",
+      "role": "animation",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/speaking-chunk8.vrma",
+      "role": "animation",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/speaking-chunk88.vrma",
       "role": "animation",
       "license": null,
       "source": null

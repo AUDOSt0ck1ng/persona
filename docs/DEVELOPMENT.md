@@ -23,8 +23,9 @@ descriptions, trigger scenarios, runtime types, and media paths. The release ass
 derives its expected media from this catalog instead of a second hard-coded
 list.
 
-The active catalog contains the permanent Idle and Speaking action slots but
-declares no character media during first-run development.
+The active catalog publishes the default model plus the permanent Idle and
+Speaking action slots and their bundled motion files. Users can replace that
+model or extend the animation library from Settings.
 `library.json.example` and `manifest.json.example` are complete, directly
 copyable examples for the ignored local test media. Packaged models live under
 `public/assets/models/` and animations under `public/assets/animations/`. When
@@ -62,6 +63,37 @@ the merged snapshot has a valid `default_model_id`. Importing the first user
 model selects it automatically. Empty Idle or Speaking actions use an empty
 animation URL list, which leaves the VRM in its normal pose.
 
+### Modular speaking motion
+
+When Speaking has multiple clips, the renderer treats them as conversational
+motion chunks. Each clip plays once, a non-repeating successor is selected at
+random, and the body crossfades between them while the speaking state remains
+active. Speaking chunks use a normalized 900 ms blend. The persisted
+`speaking_transition.entry_factor` and `speaking_transition.exit_factor`
+settings hold inclusive `[minimum, maximum]` ranges that scale the incoming and
+outgoing halves independently. A new factor is sampled from each range for
+every chunk transition. Both packaged ranges default to `[1.5, 1.8]`. A factor
+of `1` is 450 ms per half, `0.1` is 45 ms, and `8` is 3.6 seconds. The weights
+always sum to one, preventing the model's rest pose from leaking through. Lip sync
+continues to follow the live output level independently. A
+short voice pause therefore stops the mouth without interrupting the current
+body sequence.
+
+The values are stored in Persona's per-user `settings.json` as:
+
+```json
+"speaking_transition": {
+  "entry_factor": [1.5, 1.8],
+  "exit_factor": [1.5, 1.8]
+}
+```
+
+They can also be changed from the gated Developer tab in the Settings window.
+The warning must be acknowledged once before its controls are available. Valid
+factors range from `0.1` to `8`. Each visible slider sets a fixed range such as
+`[1.6, 1.6]`; Reset developer settings restores the packaged ranges while
+leaving developer access enabled.
+
 ## MCP contract
 
 `electron/mcp-server.cjs` owns the Codex-facing tool schemas and translates
@@ -97,9 +129,10 @@ All operating systems implement:
 - `onStatus(...)` for diagnostics.
 
 `AudioActivityGate` owns the shared short-silence behavior. Lips follow every
-level immediately. The body remains in its talking motion for 900 ms of silence
-before returning to listening, preventing sentence gaps from causing abrupt
-animation changes.
+level immediately. The activity gate holds speaking for 250 ms of silence, and
+the renderer waits another 250 ms before returning the body to idle. This keeps
+brief word gaps continuous without extending conversational motion far into a
+real pause.
 
 Voice-source validation and stable identities are shared through
 `electron/voice-source.cjs`; discovery lives in

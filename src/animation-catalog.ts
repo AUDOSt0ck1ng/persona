@@ -24,6 +24,12 @@ export function animationUrlsForType(
     .flatMap((animation) => animation.asset_urls);
 }
 
+export function animationUrlSignature(
+  animationUrls: readonly string[] | undefined,
+): string {
+  return JSON.stringify(animationUrls ?? []);
+}
+
 export function randomAnimationUrl(
   choices: readonly string[],
   previous: string | null = null,

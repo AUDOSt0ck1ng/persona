@@ -15,7 +15,7 @@ const {
   sanitizeVoiceSource,
 } = require("./voice-source.cjs");
 
-const SETTINGS_SCHEMA_VERSION = 5;
+const SETTINGS_SCHEMA_VERSION = 7;
 const DEFAULT_PACKAGED_LIBRARY_PATH = path.join(
   __dirname,
   "..",
@@ -29,6 +29,11 @@ const MAX_ASSET_BYTES = 200 * 1024 * 1024;
 const MAX_CUSTOM_MODELS = 50;
 const MAX_CUSTOM_ANIMATIONS = 100;
 const MAX_CUSTOM_ANIMATION_CLIPS = 300;
+const MIN_SPEAKING_TRANSITION_FACTOR = 0.1;
+const MAX_SPEAKING_TRANSITION_FACTOR = 8;
+const MIN_BODY_TRANSITION_SECONDS = 0.05;
+const MAX_BODY_TRANSITION_SECONDS = 3;
+const DEFAULT_BODY_TRANSITION_SECONDS = 0.35;
 const ASSET_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DEFAULT_MODEL_LIGHTING = Object.freeze({
@@ -45,12 +50,71 @@ const MODEL_LIGHTING_RANGES = Object.freeze({
   key_light_intensity: [0, 4],
   ambient_intensity: [0, 4],
 });
+const DEFAULT_SPEAKING_TRANSITION = Object.freeze({
+  entry_factor: Object.freeze([1.5, 1.8]),
+  exit_factor: Object.freeze([1.5, 1.8]),
+});
+
+function defaultSpeakingTransition() {
+  return {
+    entry_factor: [...DEFAULT_SPEAKING_TRANSITION.entry_factor],
+    exit_factor: [...DEFAULT_SPEAKING_TRANSITION.exit_factor],
+  };
+}
+
+function sanitizeTransitionRange(value, fallback) {
+  const candidate = Array.isArray(value) ? value : [value, value];
+  if (candidate.length !== 2) return [...fallback];
+  const minimum = Number(candidate[0]);
+  const maximum = Number(candidate[1]);
+  if (
+    !Number.isFinite(minimum) ||
+    !Number.isFinite(maximum) ||
+    minimum < MIN_SPEAKING_TRANSITION_FACTOR ||
+    maximum > MAX_SPEAKING_TRANSITION_FACTOR ||
+    minimum > maximum
+  ) {
+    return [...fallback];
+  }
+  return [
+    Math.round(minimum * 100) / 100,
+    Math.round(maximum * 100) / 100,
+  ];
+}
+
+function sanitizeSpeakingTransition(value) {
+  return {
+    entry_factor: sanitizeTransitionRange(
+      value?.entry_factor,
+      DEFAULT_SPEAKING_TRANSITION.entry_factor,
+    ),
+    exit_factor: sanitizeTransitionRange(
+      value?.exit_factor,
+      DEFAULT_SPEAKING_TRANSITION.exit_factor,
+    ),
+  };
+}
+
+function sanitizeBodyTransitionSeconds(value) {
+  const seconds = Number(value);
+  if (
+    !Number.isFinite(seconds) ||
+    seconds < MIN_BODY_TRANSITION_SECONDS ||
+    seconds > MAX_BODY_TRANSITION_SECONDS
+  ) {
+    return DEFAULT_BODY_TRANSITION_SECONDS;
+  }
+  return Math.round(seconds * 100) / 100;
+}
 
 function defaultState(packagedLibrary) {
   return {
     schema_version: SETTINGS_SCHEMA_VERSION,
     default_model_id: packagedLibrary.default_model_id,
     character_size: 1,
+    developer_settings_enabled: false,
+    body_transition_seconds: DEFAULT_BODY_TRANSITION_SECONDS,
+    speaking_transition: defaultSpeakingTransition(),
     model_lighting: {},
     models: [],
     animations: [],
@@ -337,7 +401,7 @@ function safeReadState(settingsPath, packagedLibrary) {
   const fallback = defaultState(packagedLibrary);
   try {
     const parsed = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
-    if (![1, 2, 3, 4, SETTINGS_SCHEMA_VERSION].includes(parsed?.schema_version)) {
+    if (![1, 2, 3, 4, 5, 6, SETTINGS_SCHEMA_VERSION].includes(parsed?.schema_version)) {
       return { migrated: false, state: fallback };
     }
     const { hidden, overrides } = packagedUserLayers(parsed, packagedLibrary);
@@ -354,6 +418,13 @@ function safeReadState(settingsPath, packagedLibrary) {
           ? parsed.default_model_id
           : fallback.default_model_id,
       character_size: parsed.character_size,
+      developer_settings_enabled: parsed.developer_settings_enabled === true,
+      body_transition_seconds: sanitizeBodyTransitionSeconds(
+        parsed.body_transition_seconds,
+      ),
+      speaking_transition: sanitizeSpeakingTransition(
+        parsed.speaking_transition,
+      ),
       model_lighting: sanitizeModelLighting(
         parsed.model_lighting,
         knownModelIds,
@@ -365,7 +436,7 @@ function safeReadState(settingsPath, packagedLibrary) {
     };
 
     if (parsed.schema_version !== SETTINGS_SCHEMA_VERSION) {
-      if ([3, 4].includes(parsed.schema_version)) {
+      if ([3, 4, 5, 6].includes(parsed.schema_version)) {
         const animations = sanitizeUserAnimations(parsed.animations);
         const knownAnimationIds = new Set([
           ...packagedLibrary.animations.map((animation) => animation.id),
@@ -572,6 +643,13 @@ function createSettingsStore({
         characterSize <= MAX_CHARACTER_SIZE
           ? characterSize
           : 1,
+      developer_settings_enabled: state.developer_settings_enabled === true,
+      body_transition_seconds: sanitizeBodyTransitionSeconds(
+        state.body_transition_seconds,
+      ),
+      speaking_transition: sanitizeSpeakingTransition(
+        state.speaking_transition,
+      ),
       packaged_animation_change_count: changedPackagedIds.size,
       models,
       animations: availableAnimations(),
@@ -829,6 +907,62 @@ function createSettingsStore({
     return getSnapshot();
   }
 
+  function setSpeakingTransition(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error("Speaking transition settings must be an object.");
+    }
+    for (const field of ["entry_factor", "exit_factor"]) {
+      const range = value[field];
+      if (
+        !Array.isArray(range) ||
+        range.length !== 2 ||
+        range.some(
+          (factor) =>
+            !Number.isFinite(Number(factor)) ||
+            Number(factor) < MIN_SPEAKING_TRANSITION_FACTOR ||
+            Number(factor) > MAX_SPEAKING_TRANSITION_FACTOR,
+        ) ||
+        Number(range[0]) > Number(range[1])
+      ) {
+        throw new Error(
+          `Speaking transition ranges must contain two ordered factors between ${MIN_SPEAKING_TRANSITION_FACTOR} and ${MAX_SPEAKING_TRANSITION_FACTOR}.`,
+        );
+      }
+    }
+    state.speaking_transition = sanitizeSpeakingTransition(value);
+    writeState();
+    return getSnapshot();
+  }
+
+  function setBodyTransitionSeconds(value) {
+    const seconds = Number(value);
+    if (
+      !Number.isFinite(seconds) ||
+      seconds < MIN_BODY_TRANSITION_SECONDS ||
+      seconds > MAX_BODY_TRANSITION_SECONDS
+    ) {
+      throw new Error(
+        `Body transition duration must be between ${MIN_BODY_TRANSITION_SECONDS} and ${MAX_BODY_TRANSITION_SECONDS} seconds.`,
+      );
+    }
+    state.body_transition_seconds = sanitizeBodyTransitionSeconds(seconds);
+    writeState();
+    return getSnapshot();
+  }
+
+  function enableDeveloperSettings() {
+    state.developer_settings_enabled = true;
+    writeState();
+    return getSnapshot();
+  }
+
+  function resetDeveloperSettings() {
+    state.body_transition_seconds = DEFAULT_BODY_TRANSITION_SECONDS;
+    state.speaking_transition = defaultSpeakingTransition();
+    writeState();
+    return getSnapshot();
+  }
+
   function setVoiceSource(value) {
     state.voice_source = sanitizeVoiceSource(value);
     writeState();
@@ -963,9 +1097,13 @@ function createSettingsStore({
     getAnimation,
     getSnapshot,
     importModel,
+    enableDeveloperSettings,
     resetPackagedAnimations,
+    resetDeveloperSettings,
     resolveAssetRequest,
     setCharacterSize,
+    setSpeakingTransition,
+    setBodyTransitionSeconds,
     setVoiceSource,
     setDefaultModel,
     setModelLighting,
@@ -977,6 +1115,7 @@ function createSettingsStore({
 module.exports = {
   ANIMATION_NAME_PATTERN,
   DEFAULT_MODEL_LIGHTING,
+  DEFAULT_SPEAKING_TRANSITION,
   DEFAULT_PACKAGED_LIBRARY_PATH,
   MAX_CHARACTER_SIZE,
   MIN_CHARACTER_SIZE,

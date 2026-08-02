@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  animationUrlSignature,
   animationUrlsForType,
   immediateVoiceAnimation,
   randomAnimationUrl,
@@ -66,5 +67,14 @@ describe('Persona animation contract', () => {
       'talk2.vrma',
       'talk3.vrma',
     ]);
+  });
+
+  it('keeps equivalent animation URL lists stable across settings snapshots', () => {
+    expect(animationUrlSignature(['one.vrma', 'two.vrma'])).toBe(
+      animationUrlSignature(['one.vrma', 'two.vrma']),
+    );
+    expect(animationUrlSignature(['one.vrma', 'two.vrma'])).not.toBe(
+      animationUrlSignature(['two.vrma', 'one.vrma']),
+    );
   });
 });

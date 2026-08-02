@@ -20,16 +20,53 @@ Persona includes the `dawn.exr` environment from `@pmndrs/assets`. The asset
 collection is published under CC0 1.0 and sources its HDR environments from
 Poly Haven.
 
-## Character models and animations
+## Default model
+
+### AvatarSample_A
+
+- File: `models/AvatarSample_A.vrm`
+- Title: AvatarSample_A
+- Creator: VRoid Project / pixiv Inc.
+- Attribution: AvatarSample_A by VRoid Project / pixiv Inc.
+- Source: [VRoid Hub model page](https://hub.vroid.com/en/characters/2843975675147313744/models/5644550979324015604)
+- Terms: [VRoid sample-model conditions of use](https://vroid.pixiv.help/hc/en-us/articles/4402394424089-VRoidPreset-A-Z)
+- License scope: excluded from Persona's MIT License
+
+The model's terms allow use, modification, commercial use, and redistribution;
+attribution is not required, but Persona provides it above. The model is not
+CC0. Its terms prohibit representing it as CC0, redistributing the model or its
+contained data for a fee, using its data to develop or supply a character
+creation service, implying pixiv endorsement, and the other prohibited conduct
+listed in the linked conditions.
+
+## Bundled animations
+
+The following animation assets are distributed with Persona but are explicitly
+excluded from the MIT License that applies to the source code:
+
+### Idle
+
+- `animations/idle.vrma`
+
+### Speaking
+
+- `animations/speaking-chunk00.vrma`
+- `animations/speaking-chunk1.vrma` through `animations/speaking-chunk8.vrma`
+- `animations/speaking-chunk11.vrma` through `animations/speaking-chunk88.vrma`
+  using repeated-number names (`11`, `22`, and so on)
+
+The repository's MIT License grants no rights to these animation files. No
+separate reuse license is granted by this repository. Their original VRMA
+metadata identifies exporter software but contains no creator, source URL,
+copyright, or license information.
+
+## Other character models and animations
 
 VRM and VRMA files are intentionally ignored by Git unless they have been
-explicitly cleared for distribution. Each distributed model or animation must
-be listed below with its title, creator, source, license, required attribution,
-and any applicable restrictions. The same asset must also have complete
-license and source fields in `manifest.json`.
-
-No character models or animations are currently licensed for distribution as
-part of this repository.
+explicitly cleared for distribution. Each additional distributed model or
+animation must be documented with its title, creator, source, license, required
+attribution, and any applicable restrictions. The same asset must also have
+complete license and source fields in `manifest.json`.
 
 Local files without a verified redistribution license are development inputs
 only. Therefore:
@@ -37,9 +74,9 @@ only. Therefore:
 - do not publish unverified files in a source repository;
 - do not attach a package containing them to a release;
 - do not represent the MIT License as covering them; and
-- do not set `distributionAllowed` to `true` for these files.
+- do not add them to the distributable manifest.
 
-The automated release gate enforces the last two requirements, but repository
+The automated release gate enforces the manifest boundary, but repository
 authors remain responsible for not committing restricted files.
 
 `library.json.example` and `manifest.json.example` describe the current ignored
