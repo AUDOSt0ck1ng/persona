@@ -721,6 +721,21 @@ export function SettingsPage() {
     );
   };
 
+  const previewBodyTransitionSeconds = (value: number) => {
+    setSettings((current) => ({
+      ...current,
+      body_transition_seconds: value,
+    }));
+  };
+
+  const saveBodyTransitionSeconds = async (value: number) => {
+    if (!bridge) return;
+    await persistAppearance(
+      () => bridge.setBodyTransitionSeconds(value),
+      'Body transition duration updated.',
+    );
+  };
+
   const speakingTransitionSliderValue = (
     field: keyof PersonaSpeakingTransitionSettings,
   ) => {
@@ -882,6 +897,8 @@ export function SettingsPage() {
           ? 'External events'
           : 'Automatic detection';
   const developerSettingsModified =
+    settings.body_transition_seconds !==
+      SETTINGS_FALLBACK.body_transition_seconds ||
     (['entry_factor', 'exit_factor'] as const).some((field) =>
       settings.speaking_transition[field].some(
         (factor, index) =>
@@ -1932,6 +1949,47 @@ export function SettingsPage() {
                         </label>
                       </div>
                     ))}
+
+                    <div className="lighting-row">
+                      <label>
+                        <span>
+                          Body transition duration
+                          <small className="transition-range-state">
+                            {settings.body_transition_seconds.toFixed(2)}s
+                          </small>
+                        </span>
+                        <input
+                          disabled={busy || !bridge}
+                          max="3"
+                          min="0.05"
+                          onChange={(event) =>
+                            previewBodyTransitionSeconds(
+                              Number(event.currentTarget.value),
+                            )
+                          }
+                          onKeyUp={(event) => {
+                            if (event.key.startsWith('Arrow')) {
+                              void saveBodyTransitionSeconds(
+                                Number(event.currentTarget.value),
+                              );
+                            }
+                          }}
+                          onPointerUp={(event) =>
+                            void saveBodyTransitionSeconds(
+                              Number(event.currentTarget.value),
+                            )
+                          }
+                          step="0.05"
+                          type="range"
+                          value={settings.body_transition_seconds}
+                        />
+                        <div className="slider-labels">
+                          <span>0.05s · Fast</span>
+                          <span>0.5s</span>
+                          <span>3s · Slow</span>
+                        </div>
+                      </label>
+                    </div>
                   </section>
                 </>
               )}
@@ -2501,6 +2559,7 @@ export function SettingsPage() {
                   }}
                   playback={previewClip ? 'once' : 'loop'}
                   speaking={false}
+                  bodyTransitionSeconds={settings.body_transition_seconds}
                   speakingTransition={settings.speaking_transition}
                 />
               )}

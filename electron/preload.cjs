@@ -47,6 +47,8 @@ contextBridge.exposeInMainWorld("personaSettings", {
       "persona:settings-set-speaking-transition",
       transition,
     ),
+  setBodyTransitionSeconds: (seconds) =>
+    ipcRenderer.invoke("persona:settings-set-body-transition-seconds", seconds),
   enableDeveloperSettings: () =>
     ipcRenderer.invoke("persona:settings-enable-developer"),
   resetDeveloperSettings: () =>

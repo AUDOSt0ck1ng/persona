@@ -31,6 +31,9 @@ const MAX_CUSTOM_ANIMATIONS = 100;
 const MAX_CUSTOM_ANIMATION_CLIPS = 300;
 const MIN_SPEAKING_TRANSITION_FACTOR = 0.1;
 const MAX_SPEAKING_TRANSITION_FACTOR = 8;
+const MIN_BODY_TRANSITION_SECONDS = 0.05;
+const MAX_BODY_TRANSITION_SECONDS = 3;
+const DEFAULT_BODY_TRANSITION_SECONDS = 0.35;
 const ASSET_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DEFAULT_MODEL_LIGHTING = Object.freeze({
@@ -92,12 +95,25 @@ function sanitizeSpeakingTransition(value) {
   };
 }
 
+function sanitizeBodyTransitionSeconds(value) {
+  const seconds = Number(value);
+  if (
+    !Number.isFinite(seconds) ||
+    seconds < MIN_BODY_TRANSITION_SECONDS ||
+    seconds > MAX_BODY_TRANSITION_SECONDS
+  ) {
+    return DEFAULT_BODY_TRANSITION_SECONDS;
+  }
+  return Math.round(seconds * 100) / 100;
+}
+
 function defaultState(packagedLibrary) {
   return {
     schema_version: SETTINGS_SCHEMA_VERSION,
     default_model_id: packagedLibrary.default_model_id,
     character_size: 1,
     developer_settings_enabled: false,
+    body_transition_seconds: DEFAULT_BODY_TRANSITION_SECONDS,
     speaking_transition: defaultSpeakingTransition(),
     model_lighting: {},
     models: [],
@@ -403,6 +419,9 @@ function safeReadState(settingsPath, packagedLibrary) {
           : fallback.default_model_id,
       character_size: parsed.character_size,
       developer_settings_enabled: parsed.developer_settings_enabled === true,
+      body_transition_seconds: sanitizeBodyTransitionSeconds(
+        parsed.body_transition_seconds,
+      ),
       speaking_transition: sanitizeSpeakingTransition(
         parsed.speaking_transition,
       ),
@@ -625,6 +644,9 @@ function createSettingsStore({
           ? characterSize
           : 1,
       developer_settings_enabled: state.developer_settings_enabled === true,
+      body_transition_seconds: sanitizeBodyTransitionSeconds(
+        state.body_transition_seconds,
+      ),
       speaking_transition: sanitizeSpeakingTransition(
         state.speaking_transition,
       ),
@@ -912,6 +934,22 @@ function createSettingsStore({
     return getSnapshot();
   }
 
+  function setBodyTransitionSeconds(value) {
+    const seconds = Number(value);
+    if (
+      !Number.isFinite(seconds) ||
+      seconds < MIN_BODY_TRANSITION_SECONDS ||
+      seconds > MAX_BODY_TRANSITION_SECONDS
+    ) {
+      throw new Error(
+        `Body transition duration must be between ${MIN_BODY_TRANSITION_SECONDS} and ${MAX_BODY_TRANSITION_SECONDS} seconds.`,
+      );
+    }
+    state.body_transition_seconds = sanitizeBodyTransitionSeconds(seconds);
+    writeState();
+    return getSnapshot();
+  }
+
   function enableDeveloperSettings() {
     state.developer_settings_enabled = true;
     writeState();
@@ -919,6 +957,7 @@ function createSettingsStore({
   }
 
   function resetDeveloperSettings() {
+    state.body_transition_seconds = DEFAULT_BODY_TRANSITION_SECONDS;
     state.speaking_transition = defaultSpeakingTransition();
     writeState();
     return getSnapshot();
@@ -1064,6 +1103,7 @@ function createSettingsStore({
     resolveAssetRequest,
     setCharacterSize,
     setSpeakingTransition,
+    setBodyTransitionSeconds,
     setVoiceSource,
     setDefaultModel,
     setModelLighting,

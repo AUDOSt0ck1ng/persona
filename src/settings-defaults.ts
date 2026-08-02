@@ -1,4 +1,7 @@
-import { DEFAULT_SPEAKING_TRANSITION } from './speaking-chunks';
+import {
+  DEFAULT_BODY_TRANSITION_SECONDS,
+  DEFAULT_SPEAKING_TRANSITION,
+} from './speaking-chunks';
 
 interface PackagedLibraryDocument {
   schema_version: number;
@@ -88,6 +91,7 @@ export const SETTINGS_FALLBACK: PersonaSettingsSnapshot = {
   default_model_id: null,
   character_size: 1,
   developer_settings_enabled: false,
+  body_transition_seconds: DEFAULT_BODY_TRANSITION_SECONDS,
   speaking_transition: { ...DEFAULT_SPEAKING_TRANSITION },
   packaged_animation_change_count: 0,
   models: [],

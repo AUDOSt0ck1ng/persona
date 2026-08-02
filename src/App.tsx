@@ -132,6 +132,7 @@ export function App() {
         onAnimationComplete={handleAnimationComplete}
         playback={bodyOverride ? 'once' : 'loop'}
         speaking={speaking}
+        bodyTransitionSeconds={settings.body_transition_seconds}
         speakingTransition={settings.speaking_transition}
       />
     </main>

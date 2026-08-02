@@ -787,6 +787,11 @@ if (!app.requestSingleInstanceLock()) {
       (_event, transition) =>
         publishSettings(settingsStore.setSpeakingTransition(transition)),
     );
+    ipcMain.handle(
+      "persona:settings-set-body-transition-seconds",
+      (_event, seconds) =>
+        publishSettings(settingsStore.setBodyTransitionSeconds(seconds)),
+    );
     ipcMain.handle("persona:settings-enable-developer", () =>
       publishSettings(settingsStore.enableDeveloperSettings()),
     );

@@ -77,6 +77,7 @@ test("starts with permanent empty Idle and Speaking actions", (context) => {
 
   assert.equal(snapshot.character_size, 1);
   assert.equal(snapshot.developer_settings_enabled, false);
+  assert.equal(snapshot.body_transition_seconds, 0.35);
   assert.deepEqual(snapshot.speaking_transition, {
     entry_factor: [1.5, 1.8],
     exit_factor: [1.5, 1.8],
@@ -321,6 +322,8 @@ test("validates custom metadata, files, duplicates, and appearance settings", (c
   );
   assert.throws(() => store.setCharacterSize(2), /between/);
   assert.equal(store.setCharacterSize(1.25).character_size, 1.25);
+  assert.throws(() => store.setBodyTransitionSeconds(0.01), /between/);
+  assert.equal(store.setBodyTransitionSeconds(0.4).body_transition_seconds, 0.4);
   assert.throws(
     () =>
       store.setSpeakingTransition({
@@ -351,6 +354,7 @@ test("validates custom metadata, files, duplicates, and appearance settings", (c
     entry_factor: [1.5, 1.8],
     exit_factor: [1.5, 1.8],
   });
+  assert.equal(store.getSnapshot().body_transition_seconds, 0.35);
   assert.equal(store.getSnapshot().developer_settings_enabled, true);
 
   const invalidModel = path.join(root, "invalid.vrm");
@@ -677,6 +681,7 @@ test("migrates schema 6 into locked developer settings without losing transition
   }).getSnapshot();
   assert.equal(snapshot.schema_version, 7);
   assert.equal(snapshot.developer_settings_enabled, false);
+  assert.equal(snapshot.body_transition_seconds, 0.35);
   assert.deepEqual(snapshot.speaking_transition, {
     entry_factor: [2.5, 2.5],
     exit_factor: [0.75, 0.75],

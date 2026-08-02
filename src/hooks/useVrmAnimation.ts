@@ -56,17 +56,17 @@ interface SpeakingBlend {
 }
 
 function transitionSeconds(
-  previous: PlayableAnimationType | null,
   next: PlayableAnimationType,
+  bodyTransitionSeconds: number,
 ): number {
-  if (previous === 'TALK' && next === 'IDLE') return 1.15;
   if (next === 'TALK') return 0.85;
-  return 0.7;
+  return bodyTransitionSeconds;
 }
 
 export function useVrmAnimation(
   vrm: VRM | null,
   speakingTransition: PersonaSpeakingTransitionSettings,
+  bodyTransitionSeconds: number,
 ) {
   const mixer = useRef<THREE.AnimationMixer | null>(null);
   const current = useRef<THREE.AnimationAction | null>(null);
@@ -186,7 +186,10 @@ export function useVrmAnimation(
         const fadeSeconds =
           currentType.current === 'TALK'
             ? speakingDurations.total
-            : transitionSeconds(currentType.current, 'TALK');
+            : transitionSeconds(
+                'TALK',
+                bodyTransitionSeconds,
+              );
         action.reset();
         configureAnimationAction(action, 'once');
         if (current.current === action) {
@@ -227,7 +230,7 @@ export function useVrmAnimation(
         }
       }
     },
-    [loadClip, vrm],
+    [bodyTransitionSeconds, loadClip, vrm],
   );
 
   const play = useCallback(
@@ -305,7 +308,10 @@ export function useVrmAnimation(
           previousAnimation.current.get(type) ?? null,
         );
         if (!url) {
-          const fadeSeconds = transitionSeconds(currentType.current, type);
+          const fadeSeconds = transitionSeconds(
+            type,
+            bodyTransitionSeconds,
+          );
           current.current?.fadeOut(fadeSeconds);
           current.current = null;
           currentType.current = type;
@@ -316,7 +322,10 @@ export function useVrmAnimation(
         const clip = await loadClip(url);
         if (generation !== requestGeneration.current || !mixer.current) return;
         const action = mixer.current.clipAction(clip);
-        const fadeSeconds = transitionSeconds(currentType.current, type);
+        const fadeSeconds = transitionSeconds(
+          type,
+          bodyTransitionSeconds,
+        );
         action.reset();
         configureAnimationAction(action, playback);
         if (playback === 'once') {
@@ -338,7 +347,7 @@ export function useVrmAnimation(
         }
       }
     },
-    [advanceSpeakingSequence, loadClip, vrm],
+    [advanceSpeakingSequence, bodyTransitionSeconds, loadClip, vrm],
   );
 
   const update = useCallback(

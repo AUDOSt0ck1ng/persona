@@ -16,6 +16,7 @@ interface AvatarProps {
   onAnimationComplete: () => void;
   playback: 'loop' | 'once';
   speaking: boolean;
+  bodyTransitionSeconds: number;
   speakingTransition: PersonaSpeakingTransitionSettings;
   onReady?: (scene: THREE.Object3D) => void;
 }
@@ -29,6 +30,7 @@ function AvatarModel({
   onAnimationComplete,
   playback,
   speaking,
+  bodyTransitionSeconds,
   speakingTransition,
   onReady,
 }: AvatarProps) {
@@ -36,6 +38,7 @@ function AvatarModel({
   const { play, update: updateAnimation } = useVrmAnimation(
     vrm,
     speakingTransition,
+    bodyTransitionSeconds,
   );
   const updateLipSync = useAmplitudeLipSync(vrm);
   const updateBlink = useBlink(vrm);

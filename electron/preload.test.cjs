@@ -79,6 +79,7 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
     entry_factor: [1.6, 1.6],
     exit_factor: [1.7, 1.7],
   });
+  await settings.setBodyTransitionSeconds(0.35);
   await settings.enableDeveloperSettings();
   await settings.resetDeveloperSettings();
   await settings.setVoiceSource({
@@ -130,6 +131,7 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
       "persona:settings-set-speaking-transition",
       { entry_factor: [1.6, 1.6], exit_factor: [1.7, 1.7] },
     ],
+    ["persona:settings-set-body-transition-seconds", 0.35],
     ["persona:settings-enable-developer"],
     ["persona:settings-reset-developer"],
     [

@@ -5,6 +5,8 @@ import {
 } from './animation-catalog';
 
 export const SPEAKING_CHUNK_BASE_SECONDS = 0.9;
+// Provisional developer default; tune this after real voice-session testing.
+export const DEFAULT_BODY_TRANSITION_SECONDS = 0.35;
 export const DEFAULT_SPEAKING_TRANSITION: PersonaSpeakingTransitionSettings = {
   entry_factor: [1.5, 1.8],
   exit_factor: [1.5, 1.8],

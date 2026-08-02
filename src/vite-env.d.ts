@@ -101,6 +101,7 @@ interface PersonaSettingsSnapshot {
   default_model_id: string | null;
   character_size: number;
   developer_settings_enabled: boolean;
+  body_transition_seconds: number;
   speaking_transition: PersonaSpeakingTransitionSettings;
   packaged_animation_change_count: number;
   models: PersonaModelSettings[];
@@ -176,6 +177,7 @@ interface Window {
     setSpeakingTransition(
       transition: PersonaSpeakingTransitionSettings,
     ): Promise<PersonaSettingsSnapshot>;
+    setBodyTransitionSeconds(seconds: number): Promise<PersonaSettingsSnapshot>;
     enableDeveloperSettings(): Promise<PersonaSettingsSnapshot>;
     resetDeveloperSettings(): Promise<PersonaSettingsSnapshot>;
     setVoiceSource(
