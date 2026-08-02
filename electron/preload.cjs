@@ -42,6 +42,15 @@ contextBridge.exposeInMainWorld("personaSettings", {
     ipcRenderer.invoke("persona:settings-set-default-model", modelId),
   setCharacterSize: (size) =>
     ipcRenderer.invoke("persona:settings-set-character-size", size),
+  setSpeakingTransition: (transition) =>
+    ipcRenderer.invoke(
+      "persona:settings-set-speaking-transition",
+      transition,
+    ),
+  enableDeveloperSettings: () =>
+    ipcRenderer.invoke("persona:settings-enable-developer"),
+  resetDeveloperSettings: () =>
+    ipcRenderer.invoke("persona:settings-reset-developer"),
   setVoiceSource: (voiceSource) =>
     ipcRenderer.invoke("persona:settings-set-voice-source", voiceSource),
   listVoiceSources: () =>

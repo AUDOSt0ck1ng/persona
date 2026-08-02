@@ -782,6 +782,17 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.handle("persona:settings-set-character-size", (_event, size) =>
       publishSettings(settingsStore.setCharacterSize(size)),
     );
+    ipcMain.handle(
+      "persona:settings-set-speaking-transition",
+      (_event, transition) =>
+        publishSettings(settingsStore.setSpeakingTransition(transition)),
+    );
+    ipcMain.handle("persona:settings-enable-developer", () =>
+      publishSettings(settingsStore.enableDeveloperSettings()),
+    );
+    ipcMain.handle("persona:settings-reset-developer", () =>
+      publishSettings(settingsStore.resetDeveloperSettings()),
+    );
     ipcMain.handle("persona:settings-set-voice-source", (_event, voiceSource) => {
       const snapshot = publishSettings(settingsStore.setVoiceSource(voiceSource));
       restartAudioListener();

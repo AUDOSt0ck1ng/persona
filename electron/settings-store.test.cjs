@@ -76,6 +76,11 @@ test("starts with permanent empty Idle and Speaking actions", (context) => {
   const snapshot = createSettingsStore({ userDataPath, packagedLibraryPath }).getSnapshot();
 
   assert.equal(snapshot.character_size, 1);
+  assert.equal(snapshot.developer_settings_enabled, false);
+  assert.deepEqual(snapshot.speaking_transition, {
+    entry_factor: [1.5, 1.8],
+    exit_factor: [1.5, 1.8],
+  });
   assert.equal(snapshot.packaged_animation_change_count, 0);
   assert.equal(snapshot.default_model_id, null);
   assert.deepEqual(snapshot.models, []);
@@ -213,7 +218,7 @@ test("keeps user library records when migrating the earlier settings schema", (c
   );
 
   const snapshot = createSettingsStore({ userDataPath, packagedLibraryPath }).getSnapshot();
-  assert.equal(snapshot.schema_version, 5);
+  assert.equal(snapshot.schema_version, 7);
   assert.equal(snapshot.default_model_id, modelId);
   assert.equal(snapshot.character_size, 1.15);
   assert.ok(snapshot.models.some((model) => model.id === modelId));
@@ -290,7 +295,7 @@ test("uses copy-on-write packaged edits and resets only that layer", (context) =
   );
 });
 
-test("validates custom metadata, files, duplicates, and character size", (context) => {
+test("validates custom metadata, files, duplicates, and appearance settings", (context) => {
   const { root, userDataPath, packagedLibraryPath } = fixture(context);
   const sourceAnimation = path.join(root, "wave.vrma");
   writeGlb(sourceAnimation);
@@ -316,6 +321,37 @@ test("validates custom metadata, files, duplicates, and character size", (contex
   );
   assert.throws(() => store.setCharacterSize(2), /between/);
   assert.equal(store.setCharacterSize(1.25).character_size, 1.25);
+  assert.throws(
+    () =>
+      store.setSpeakingTransition({
+        entry_factor: [0.09, 1],
+        exit_factor: [1, 1],
+      }),
+    /between/,
+  );
+  assert.deepEqual(
+    store.setSpeakingTransition({
+      entry_factor: [3.5, 3.5],
+      exit_factor: [1.5, 1.75],
+    }).speaking_transition,
+    { entry_factor: [3.5, 3.5], exit_factor: [1.5, 1.75] },
+  );
+  assert.deepEqual(
+    createSettingsStore({ userDataPath, packagedLibraryPath }).getSnapshot()
+      .speaking_transition,
+    { entry_factor: [3.5, 3.5], exit_factor: [1.5, 1.75] },
+  );
+  assert.equal(store.enableDeveloperSettings().developer_settings_enabled, true);
+  assert.equal(
+    createSettingsStore({ userDataPath, packagedLibraryPath }).getSnapshot()
+      .developer_settings_enabled,
+    true,
+  );
+  assert.deepEqual(store.resetDeveloperSettings().speaking_transition, {
+    entry_factor: [1.5, 1.8],
+    exit_factor: [1.5, 1.8],
+  });
+  assert.equal(store.getSnapshot().developer_settings_enabled, true);
 
   const invalidModel = path.join(root, "invalid.vrm");
   fs.writeFileSync(invalidModel, "not glTF");
@@ -547,7 +583,7 @@ test("persists every voice source mode and migrates schema 4 settings", (context
     mode: "custom",
     process_pattern: "  local-tts|open-webui  ",
   });
-  assert.equal(snapshot.schema_version, 5);
+  assert.equal(snapshot.schema_version, 7);
   assert.deepEqual(snapshot.voice_source, {
     mode: "custom",
     process_pattern: "local-tts|open-webui",
@@ -608,11 +644,41 @@ test("persists every voice source mode and migrates schema 4 settings", (context
     userDataPath,
     packagedLibraryPath,
   }).getSnapshot();
-  assert.equal(migrated.schema_version, 5);
+  assert.equal(migrated.schema_version, 7);
   assert.deepEqual(migrated.voice_source, {
     mode: "custom",
     process_pattern: "voice-engine",
     source_id: null,
     source_name: null,
+  });
+});
+
+test("migrates schema 6 into locked developer settings without losing transition values", (context) => {
+  const { userDataPath, packagedLibraryPath } = fixture(context);
+  fs.mkdirSync(userDataPath, { recursive: true });
+  fs.writeFileSync(
+    path.join(userDataPath, "settings.json"),
+    JSON.stringify({
+      schema_version: 6,
+      models: [],
+      animations: [],
+      animation_clips: {},
+      model_lighting: {},
+      speaking_transition: {
+        entry_factor: 2.5,
+        exit_factor: 0.75,
+      },
+    }),
+  );
+
+  const snapshot = createSettingsStore({
+    userDataPath,
+    packagedLibraryPath,
+  }).getSnapshot();
+  assert.equal(snapshot.schema_version, 7);
+  assert.equal(snapshot.developer_settings_enabled, false);
+  assert.deepEqual(snapshot.speaking_transition, {
+    entry_factor: [2.5, 2.5],
+    exit_factor: [0.75, 0.75],
   });
 });

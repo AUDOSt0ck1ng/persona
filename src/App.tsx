@@ -27,7 +27,7 @@ const INITIAL_STATE: VoiceState = {
   phase: 'inactive',
 };
 
-const BODY_IDLE_DELAY_MS = 650;
+const BODY_IDLE_DELAY_MS = 250;
 
 export function App() {
   const [voice, setVoice] = useState<VoiceState>(INITIAL_STATE);
@@ -129,6 +129,7 @@ export function App() {
         onAnimationComplete={handleAnimationComplete}
         playback={bodyOverride ? 'once' : 'loop'}
         speaking={speaking}
+        speakingTransition={settings.speaking_transition}
       />
     </main>
   ) : (

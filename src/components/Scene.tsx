@@ -26,6 +26,7 @@ interface SceneProps {
   onAnimationComplete: () => void;
   playback: 'loop' | 'once';
   speaking: boolean;
+  speakingTransition: PersonaSpeakingTransitionSettings;
 }
 
 interface TargetControls {

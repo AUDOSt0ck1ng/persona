@@ -75,6 +75,12 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
   await settings.deleteModel("model-id");
   await settings.setDefaultModel("model-id");
   await settings.setCharacterSize(1.2);
+  await settings.setSpeakingTransition({
+    entry_factor: [1.6, 1.6],
+    exit_factor: [1.7, 1.7],
+  });
+  await settings.enableDeveloperSettings();
+  await settings.resetDeveloperSettings();
   await settings.setVoiceSource({
     mode: "custom",
     process_pattern: "local-tts",
@@ -120,6 +126,12 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
     ["persona:settings-delete-model", "model-id"],
     ["persona:settings-set-default-model", "model-id"],
     ["persona:settings-set-character-size", 1.2],
+    [
+      "persona:settings-set-speaking-transition",
+      { entry_factor: [1.6, 1.6], exit_factor: [1.7, 1.7] },
+    ],
+    ["persona:settings-enable-developer"],
+    ["persona:settings-reset-developer"],
     [
       "persona:settings-set-voice-source",
       { mode: "custom", process_pattern: "local-tts" },

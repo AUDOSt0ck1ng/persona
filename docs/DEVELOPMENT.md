@@ -70,10 +70,11 @@ motion chunks. Each clip plays once, a non-repeating successor is selected at
 random, and the body crossfades between them while the speaking state remains
 active. Speaking chunks use a normalized 900 ms blend. The persisted
 `speaking_transition.entry_factor` and `speaking_transition.exit_factor`
-settings scale the duration of the incoming and outgoing halves independently;
-their defaults are `4` and `1`. A factor of `1` is 450 ms per half, `0.1` is
-45 ms, and `8` is 3.6 seconds. The weights always sum to one, preventing the
-model's rest pose from leaking through. Lip sync
+settings hold inclusive `[minimum, maximum]` ranges that scale the incoming and
+outgoing halves independently. A new factor is sampled from each range for
+every chunk transition. Both packaged ranges default to `[1.5, 1.8]`. A factor
+of `1` is 450 ms per half, `0.1` is 45 ms, and `8` is 3.6 seconds. The weights
+always sum to one, preventing the model's rest pose from leaking through. Lip sync
 continues to follow the live output level independently. A
 short voice pause therefore stops the mouth without interrupting the current
 body sequence.
@@ -82,13 +83,16 @@ The values are stored in Persona's per-user `settings.json` as:
 
 ```json
 "speaking_transition": {
-  "entry_factor": 4,
-  "exit_factor": 1
+  "entry_factor": [1.5, 1.8],
+  "exit_factor": [1.5, 1.8]
 }
 ```
 
-They can also be changed from Appearance in the Settings window. Valid factors
-range from `0.1` to `8`.
+They can also be changed from the gated Developer tab in the Settings window.
+The warning must be acknowledged once before its controls are available. Valid
+factors range from `0.1` to `8`. Each visible slider sets a fixed range such as
+`[1.6, 1.6]`; Reset developer settings restores the packaged ranges while
+leaving developer access enabled.
 
 ## MCP contract
 

@@ -25,7 +25,13 @@ import {
   type ThemePreference,
 } from '../theme';
 
-type SettingsSection = 'models' | 'animations' | 'appearance' | 'voice' | 'mcp';
+type SettingsSection =
+  | 'models'
+  | 'animations'
+  | 'appearance'
+  | 'voice'
+  | 'mcp'
+  | 'developer';
 type LightingNumberField =
   | 'exposure'
   | 'environment_intensity'
@@ -56,9 +62,10 @@ const SECTIONS: Array<{
 }> = [
   { id: 'models', label: 'Models', description: 'Character library' },
   { id: 'animations', label: 'Actions', description: 'Motion library' },
-  { id: 'appearance', label: 'Appearance', description: 'Default framing' },
+  { id: 'appearance', label: 'Appearance', description: 'Visual tuning' },
   { id: 'voice', label: 'Voice', description: 'Audio source' },
   { id: 'mcp', label: 'MCP', description: 'Agent connection' },
+  { id: 'developer', label: 'Developer', description: 'Advanced tuning' },
 ];
 
 function Icon({ children }: { children: ReactNode }) {
@@ -105,6 +112,11 @@ const SECTION_ICONS: Record<SettingsSection, ReactNode> = {
     <Icon>
       <path d="M6 2.4v2.6M10 2.4v2.6M4.6 5h6.8v2.9A3.4 3.4 0 0 1 8 11.3 3.4 3.4 0 0 1 4.6 7.9z" />
       <path d="M8 11.3v2.3" />
+    </Icon>
+  ),
+  developer: (
+    <Icon>
+      <path d="M5.2 2.8 2.4 8l2.8 5.2M10.8 2.8 13.6 8l-2.8 5.2M9.2 2.2 6.8 13.8" />
     </Icon>
   ),
 };
@@ -679,6 +691,75 @@ export function SettingsPage() {
     );
   };
 
+  const previewSpeakingTransition = (
+    field: keyof PersonaSpeakingTransitionSettings,
+    value: number,
+  ) => {
+    const fixedRange = [value, value] as const;
+    setSettings((current) => ({
+      ...current,
+      speaking_transition: {
+        ...current.speaking_transition,
+        [field]: fixedRange,
+      },
+    }));
+  };
+
+  const saveSpeakingTransition = async (
+    field: keyof PersonaSpeakingTransitionSettings,
+    value: number,
+  ) => {
+    if (!bridge) return;
+    const fixedRange = [value, value] as const;
+    await persistAppearance(
+      () =>
+        bridge.setSpeakingTransition({
+          ...settings.speaking_transition,
+          [field]: fixedRange,
+        }),
+      'Speaking transition updated.',
+    );
+  };
+
+  const speakingTransitionSliderValue = (
+    field: keyof PersonaSpeakingTransitionSettings,
+  ) => {
+    const [minimum, maximum] = settings.speaking_transition[field];
+    return Math.round(((minimum + maximum) / 2) * 100) / 100;
+  };
+
+  const requestDeveloperSettingsAccess = () => {
+    if (!bridge || settings.developer_settings_enabled) return;
+    openConfirmation({
+      confirmLabel: 'Enable developer settings',
+      title: 'Enable developer settings?',
+      detail:
+        'These controls change low-level animation behavior and may make motion look unstable or unnatural. Continue only if you are comfortable restoring the packaged defaults.',
+      onConfirm: async () => {
+        await run(
+          () => bridge.enableDeveloperSettings(),
+          'Developer settings enabled.',
+        );
+      },
+    });
+  };
+
+  const resetDeveloperSettings = () => {
+    if (!bridge || !settings.developer_settings_enabled) return;
+    openConfirmation({
+      confirmLabel: 'Reset',
+      title: 'Reset developer settings?',
+      detail:
+        'All developer-only values will return to the defaults packaged with Persona.',
+      onConfirm: async () => {
+        await run(
+          () => bridge.resetDeveloperSettings(),
+          'Developer settings reset to packaged defaults.',
+        );
+      },
+    });
+  };
+
   const previewLighting: PersonaLightingSettings = useMemo(() => {
     return resolveLightingSettings(
       selectedModel ? settings.model_lighting[selectedModel.id] : null,
@@ -800,6 +881,13 @@ export function SettingsPage() {
         : settings.voice_source.mode === 'external'
           ? 'External events'
           : 'Automatic detection';
+  const developerSettingsModified =
+    (['entry_factor', 'exit_factor'] as const).some((field) =>
+      settings.speaking_transition[field].some(
+        (factor, index) =>
+          factor !== SETTINGS_FALLBACK.speaking_transition[field][index],
+      ),
+    );
 
   const headingSummary =
     section === 'mcp'
@@ -808,6 +896,10 @@ export function SettingsPage() {
         : 'Local agent connection'
       : section === 'voice'
         ? voiceHeading
+        : section === 'developer'
+          ? settings.developer_settings_enabled
+            ? 'Developer settings enabled'
+            : 'Developer settings locked'
         : `${customModelCount} custom models · ${customAnimationCount} custom actions`;
   const mcpHealth = mcpStatus?.health ?? (mcpLoading ? 'starting' : 'unavailable');
   const mcpServerUrl =
@@ -870,6 +962,8 @@ export function SettingsPage() {
                 ? 'Local integration'
                 : section === 'voice'
                   ? 'Voice output listener'
+                  : section === 'developer'
+                    ? 'Advanced configuration'
                   : 'Character configuration'}
             </span>
             <h1>{SECTIONS.find((item) => item.id === section)?.label}</h1>
@@ -1724,6 +1818,126 @@ export function SettingsPage() {
             </>
           )}
 
+          {section === 'developer' && (
+            <>
+              {!settings.developer_settings_enabled ? (
+                <section className="settings-panel developer-lock-panel">
+                  <div className="developer-lock-icon" aria-hidden="true">
+                    !
+                  </div>
+                  <div>
+                    <span className="eyebrow">Advanced controls</span>
+                    <h2>Developer settings are locked</h2>
+                    <p>
+                      These values tune low-level animation behavior. Incorrect
+                      values can make movement look unstable or unnatural.
+                    </p>
+                    <button
+                      className="primary-button"
+                      disabled={busy || !bridge}
+                      onClick={requestDeveloperSettingsAccess}
+                      type="button"
+                    >
+                      Enable developer settings
+                    </button>
+                  </div>
+                </section>
+              ) : (
+                <>
+                  <section className="settings-panel developer-overview-panel">
+                    <div className="panel-heading">
+                      <div>
+                        <h2>Developer settings</h2>
+                        <p>
+                          Experimental controls for tuning Persona's runtime
+                          behavior. Changes save automatically.
+                        </p>
+                      </div>
+                      <button
+                        className="lighting-reset-button"
+                        disabled={
+                          busy || !bridge || !developerSettingsModified
+                        }
+                        onClick={resetDeveloperSettings}
+                        type="button"
+                      >
+                        Reset developer settings
+                      </button>
+                    </div>
+                  </section>
+
+                  <section className="settings-panel lighting-panel">
+                    <div className="panel-heading">
+                      <div>
+                        <h2>Speaking transitions</h2>
+                        <p>
+                          Tune how body motion blends between conversational
+                          chunks. Packaged defaults vary each transition between
+                          1.5× and 1.8×. Moving a slider fixes that value until
+                          developer settings are reset.
+                        </p>
+                      </div>
+                    </div>
+
+                    {(
+                      [
+                        ['entry_factor', 'Entry factor'],
+                        ['exit_factor', 'Exit factor'],
+                      ] as const
+                    ).map(([field, label]) => (
+                      <div className="lighting-row" key={field}>
+                        <label>
+                          <span>
+                            {label}
+                            <small className="transition-range-state">
+                              {settings.speaking_transition[field][0] ===
+                              settings.speaking_transition[field][1]
+                                ? `${settings.speaking_transition[field][0]}× fixed`
+                                : `${settings.speaking_transition[field][0]}–${settings.speaking_transition[field][1]}× random`}
+                            </small>
+                          </span>
+                          <input
+                            disabled={busy || !bridge}
+                            max="8"
+                            min="0.1"
+                            onChange={(event) =>
+                              previewSpeakingTransition(
+                                field,
+                                Number(event.currentTarget.value),
+                              )
+                            }
+                            onKeyUp={(event) => {
+                              if (event.key.startsWith('Arrow')) {
+                                void saveSpeakingTransition(
+                                  field,
+                                  Number(event.currentTarget.value),
+                                );
+                              }
+                            }}
+                            onPointerUp={(event) =>
+                              void saveSpeakingTransition(
+                                field,
+                                Number(event.currentTarget.value),
+                              )
+                            }
+                            step="0.1"
+                            type="range"
+                            value={speakingTransitionSliderValue(field)}
+                          />
+                          <div className="slider-labels">
+                            <span>0.1× · Fast</span>
+                            <span>1×</span>
+                            <span>8× · Slow</span>
+                          </div>
+                        </label>
+                      </div>
+                    ))}
+                  </section>
+                </>
+              )}
+            </>
+          )}
+
           {section === 'voice' && (
             <>
               <section className="settings-panel voice-source-panel">
@@ -2287,6 +2501,7 @@ export function SettingsPage() {
                   }}
                   playback={previewClip ? 'once' : 'loop'}
                   speaking={false}
+                  speakingTransition={settings.speaking_transition}
                 />
               )}
               <div className="preview-hint">
