@@ -200,3 +200,36 @@ curl -H 'Content-Type: application/json' \
 
 `GET /health` reports whether Persona is running and returns the last state. It
 does not expose user content.
+
+## VRoid Hub connection
+
+Persona can sign in to [VRoid Hub](https://hub.vroid.com) and use a character
+that its owner marked usable only through linked applications (no direct
+`.vrm` download). This is entirely opt-in, off by default, and advanced:
+each user brings their own registered OAuth app rather than sharing one
+built into Persona.
+
+Register an application at
+[`hub.vroid.com/oauth/applications`](https://hub.vroid.com/oauth/applications),
+then open Settings → VRoid Hub. It shows the exact redirect URI to register
+for the app — `http://127.0.0.1:47831/vroid-oauth-callback` by default (or
+the equivalent for a custom `PERSONA_BRIDGE_PORT`), served by the same local
+loopback bridge as the MCP endpoint and `/events`, not the `persona://` URL
+scheme, so sign-in works the same way from `npm run dev`/`demo` and from an
+installed build. Paste the app's client ID and secret into Settings and save
+— they're encrypted at rest with Electron's `safeStorage` (OS
+keychain-backed) in `vroid-hub-credentials.json`, the same mechanism used for
+the resulting session tokens (`vroid-hub-auth.json`). On Linux, a packaged
+build also confirms the OS keyring backend is actually selected rather than
+`safeStorage`'s insecure `basic_text` fallback (used when no GNOME Secret
+Service or KWallet is running). If real OS-backed encryption isn't available,
+the feature stays disabled rather than storing either in plaintext.
+
+With no credentials configured, "Connect VRoid Hub account" in Settings stays
+disabled. When configured, Settings opens the VRoid Hub authorization page in
+your system browser (PKCE + confidential client), then lists characters the
+signed-in account owns or has hearted and marked available to other users.
+Selecting one fetches its VRM bytes through VRoid Hub's licensed
+`download_licenses` flow and holds them in memory for the running session —
+Persona does not write a hub-sourced model to disk as an ordinary, freely
+reusable local file, and it disappears on the next launch until reselected.

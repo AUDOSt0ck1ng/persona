@@ -250,6 +250,15 @@ function validateGlbFile(filePath, expectedExtension) {
   }
 }
 
+function isValidGlbBuffer(buffer) {
+  return (
+    Buffer.isBuffer(buffer) &&
+    buffer.length >= 12 &&
+    buffer.toString("ascii", 0, 4) === "glTF" &&
+    buffer.readUInt32LE(4) === 2
+  );
+}
+
 function validStoredAsset(record, extension) {
   return (
     ASSET_ID_PATTERN.test(record?.id) &&
@@ -575,6 +584,14 @@ function createSettingsStore({
   fs.mkdirSync(animationDirectory, { recursive: true });
   const initial = safeReadState(settingsPath, packagedLibrary);
   let state = initial.state;
+  // A model fetched live from a linked account (e.g. VRoid Hub). Deliberately
+  // kept out of `state`/settings.json: it never becomes an ordinary,
+  // freely-reusable local file and disappears on restart by design.
+  let hubModel = null;
+  // Whether the hub model is the active selection, tracked in memory only so
+  // the persisted default_model_id always keeps pointing at the user's last
+  // real (packaged/local) choice, even while a hub model is selected.
+  let hubModelIsActive = false;
 
   function writeState() {
     state.schema_version = SETTINGS_SCHEMA_VERSION;
@@ -619,7 +636,18 @@ function createSettingsStore({
         removable: true,
         asset_url: userAssetUrl("model", model),
       }));
-    return [...packagedModels, ...userModels];
+    const hubModels = hubModel
+      ? [
+          {
+            id: hubModel.id,
+            model_name: hubModel.model_name,
+            origin: "hub",
+            removable: false,
+            asset_url: `persona-asset://hub/${hubModel.id}.vrm`,
+          },
+        ]
+      : [];
+    return [...packagedModels, ...userModels, ...hubModels];
   }
 
   function packagedAnimationMetadata(animation) {
@@ -698,11 +726,12 @@ function createSettingsStore({
   function getSnapshot() {
     const models = availableModels();
     const modelIds = new Set(models.map((model) => model.id));
-    const defaultModel = models.some(
-      (model) => model.id === state.default_model_id,
-    )
-      ? state.default_model_id
-      : packagedLibrary.default_model_id;
+    const defaultModel =
+      hubModel && hubModelIsActive
+        ? hubModel.id
+        : models.some((model) => model.id === state.default_model_id)
+          ? state.default_model_id
+          : packagedLibrary.default_model_id;
     const characterSize = Number(state.character_size);
     const changedPackagedIds = new Set([
       ...Object.keys(state.packaged_animation_overrides),
@@ -969,8 +998,36 @@ function createSettingsStore({
     if (!availableModels().some((model) => model.id === modelId)) {
       throw new Error("Selected model is not installed.");
     }
+    if (hubModel && modelId === hubModel.id) {
+      hubModelIsActive = true;
+      return getSnapshot();
+    }
+    hubModelIsActive = false;
     state.default_model_id = modelId;
     writeState();
+    return getSnapshot();
+  }
+
+  function setActiveHubModel(buffer, { model_name } = {}) {
+    if (!Buffer.isBuffer(buffer) || buffer.length < 12) {
+      throw new Error("Downloaded model is empty or invalid.");
+    }
+    if (buffer.length > MAX_ASSET_BYTES) {
+      throw new Error("Downloaded model must be 200 MB or smaller.");
+    }
+    if (!isValidGlbBuffer(buffer)) {
+      throw new Error("Downloaded model must be a valid VRM glTF 2 binary.");
+    }
+    const normalizedName = singleLine(model_name, "Model name", 80);
+    const id = nodeCrypto.randomUUID();
+    hubModel = { id, model_name: normalizedName, buffer };
+    hubModelIsActive = true;
+    return getSnapshot();
+  }
+
+  function clearActiveHubModel() {
+    hubModel = null;
+    hubModelIsActive = false;
     return getSnapshot();
   }
 
@@ -1220,11 +1277,16 @@ function createSettingsStore({
       const resolved = path.join(animationDirectory, record.stored_filename);
       return fs.existsSync(resolved) ? resolved : null;
     }
+    if (kind === "hub") {
+      if (!hubModel || `${hubModel.id}.vrm` !== requestedFilename) return null;
+      return { buffer: hubModel.buffer };
+    }
     return null;
   }
 
   return {
     addAnimationClips,
+    clearActiveHubModel,
     createAnimation,
     deleteAnimation,
     deleteAnimationClip,
@@ -1236,6 +1298,7 @@ function createSettingsStore({
     resetPackagedAnimations,
     resetDeveloperSettings,
     resolveAssetRequest,
+    setActiveHubModel,
     setAvatarWindowSize,
     setCharacterSize,
     setSpeakingTransition,

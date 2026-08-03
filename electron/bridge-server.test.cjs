@@ -103,6 +103,59 @@ test("bridge rejects a non-loopback Host header", async (context) => {
   assert.equal(response.status, 403);
 });
 
+test("vroid-oauth-callback is 404 with no handler configured", async (context) => {
+  const bridge = createBridgeServer({ port: 0, onEvent: () => {} });
+  const address = await bridge.listen();
+  context.after(() => bridge.close());
+
+  const response = await requestServer(address, {
+    path: "/vroid-oauth-callback?code=abc&state=xyz",
+  });
+
+  assert.equal(response.status, 404);
+});
+
+test("vroid-oauth-callback forwards the parsed query params and shows a success page", async (context) => {
+  const received = [];
+  const bridge = createBridgeServer({
+    port: 0,
+    onEvent: () => {},
+    onOauthCallback: async (params) => {
+      received.push(params);
+    },
+  });
+  const address = await bridge.listen();
+  context.after(() => bridge.close());
+
+  const response = await requestServer(address, {
+    path: "/vroid-oauth-callback?code=abc123&state=xyz789",
+  });
+
+  assert.equal(response.status, 200);
+  assert.match(response.headers["content-type"], /text\/html/);
+  assert.match(response.body, /connected/i);
+  assert.deepEqual(received, [{ code: "abc123", state: "xyz789", error: null }]);
+});
+
+test("vroid-oauth-callback shows a failure page when the handler rejects", async (context) => {
+  const bridge = createBridgeServer({
+    port: 0,
+    onEvent: () => {},
+    onOauthCallback: async () => {
+      throw new Error("state mismatch");
+    },
+  });
+  const address = await bridge.listen();
+  context.after(() => bridge.close());
+
+  const response = await requestServer(address, {
+    path: "/vroid-oauth-callback?error=access_denied",
+  });
+
+  assert.equal(response.status, 200);
+  assert.match(response.body, /failed/i);
+});
+
 test("bridge accepts a valid native adapter state event", async (context) => {
   const events = [];
   const bridge = createBridgeServer({ port: 0, onEvent: (event) => events.push(event) });

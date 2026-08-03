@@ -46,7 +46,7 @@ type PersonaAnimationType =
 interface PersonaModelSettings {
   id: string;
   model_name: string;
-  origin: 'packaged' | 'user';
+  origin: 'packaged' | 'user' | 'hub';
   removable: boolean;
   asset_url: string;
 }
@@ -138,6 +138,39 @@ interface CustomAnimationMetadata {
   animation_trigger_scenario: string;
 }
 
+interface PersonaVroidHubStatus {
+  configured: boolean;
+  connected: boolean;
+  redirect_uri: string;
+}
+
+interface PersonaVroidHubCredentials {
+  clientId: string | null;
+  hasClientSecret: boolean;
+}
+
+type VroidHubUsagePermission = 'default' | 'disallow' | 'allow';
+
+interface PersonaVroidHubCharacterLicense {
+  characterization_allowed_user?: 'default' | 'author' | 'everyone';
+  personal_commercial_use?: 'default' | 'disallow' | 'profit' | 'nonprofit';
+  corporate_commercial_use?: VroidHubUsagePermission;
+  modification?: VroidHubUsagePermission;
+  redistribution?: VroidHubUsagePermission;
+  credit?: 'default' | 'necessary' | 'unnecessary';
+  violent_expression?: VroidHubUsagePermission;
+  sexual_expression?: VroidHubUsagePermission;
+}
+
+interface PersonaVroidHubCharacter {
+  id: string;
+  name: string;
+  is_downloadable: boolean;
+  portrait_url: string | null;
+  origin: 'own' | 'hearted';
+  license: PersonaVroidHubCharacterLicense | null;
+}
+
 type AvatarBridgeEvent =
   | { type: 'state'; state: VoiceState }
   | { type: 'audio-level'; level: number; bands?: Record<string, number> }
@@ -208,6 +241,26 @@ interface Window {
     setWindowTheme(theme: 'light' | 'dark'): void;
     subscribe(
       listener: (snapshot: PersonaSettingsSnapshot) => void,
+    ): () => void;
+  };
+  personaVroidHub?: {
+    getStatus(): Promise<PersonaVroidHubStatus>;
+    getCredentials(): Promise<PersonaVroidHubCredentials>;
+    setCredentials(
+      clientId: string,
+      clientSecret: string,
+    ): Promise<PersonaVroidHubStatus>;
+    clearCredentials(): Promise<PersonaVroidHubStatus>;
+    connect(): Promise<PersonaVroidHubStatus>;
+    disconnect(): Promise<PersonaVroidHubStatus>;
+    listCharacters(): Promise<PersonaVroidHubCharacter[]>;
+    selectCharacter(
+      characterId: string,
+      characterName: string,
+    ): Promise<PersonaSettingsSnapshot>;
+    openCharacterPage(characterId: string): Promise<void>;
+    subscribe(
+      listener: (status: PersonaVroidHubStatus) => void,
     ): () => void;
   };
 }
