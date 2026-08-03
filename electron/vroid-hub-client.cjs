@@ -21,16 +21,38 @@ function authorizedHeaders({ accessToken, tokenType = "Bearer" } = {}, extra = {
   };
 }
 
-// VRoid Hub's conditions-of-use fields live at different paths depending on
-// which VRM spec version the model was exported with (VRM 1.0 nests them
-// under the latest version's vrm_meta; VRM 0.0 exposes a top-level license
-// object), per developer.vroid.com's CharacterModelSerializer reference.
+// VRoid Hub's conditions-of-use fields live at different paths *and use
+// different vocabularies* depending on which VRM spec version the model was
+// exported with:
+//   - VRM 1.0: flat fields directly on the latest version's vrm_meta
+//     (VRM1Meta — camelCase, e.g. commercialUsage/modification/
+//     creditNotation), not nested under any `.license` key. See
+//     node_modules/@pixiv/three-vrm-core/types/meta/VRM1Meta.d.ts.
+//   - VRM 0.0: a separate top-level `license` object (snake_case, VRoid
+//     Hub's own vocabulary), per developer.vroid.com's
+//     CharacterModelSerializer reference.
+// The two share no field names or value vocabularies, so this returns each
+// version's native shape tagged with spec_version rather than merging them.
 function characterLicense(model) {
-  return (
-    model.latest_character_model_version?.vrm_meta?.license ??
-    model.license ??
-    null
-  );
+  const specVersion = model.latest_character_model_version?.spec_version;
+  if (specVersion === "1.0") {
+    const vrmMeta = model.latest_character_model_version?.vrm_meta;
+    if (vrmMeta == null || typeof vrmMeta !== "object") return null;
+    return {
+      spec_version: "1.0",
+      avatarPermission: vrmMeta.avatarPermission,
+      allowExcessivelyViolentUsage: vrmMeta.allowExcessivelyViolentUsage,
+      allowExcessivelySexualUsage: vrmMeta.allowExcessivelySexualUsage,
+      commercialUsage: vrmMeta.commercialUsage,
+      allowPoliticalOrReligiousUsage: vrmMeta.allowPoliticalOrReligiousUsage,
+      allowAntisocialOrHateUsage: vrmMeta.allowAntisocialOrHateUsage,
+      creditNotation: vrmMeta.creditNotation,
+      allowRedistribution: vrmMeta.allowRedistribution,
+      modification: vrmMeta.modification,
+    };
+  }
+  if (model.license == null || typeof model.license !== "object") return null;
+  return { spec_version: "0.0", ...model.license };
 }
 
 function toCharacterSummary(model, origin) {

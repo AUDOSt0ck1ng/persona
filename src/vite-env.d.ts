@@ -151,7 +151,10 @@ interface PersonaVroidHubCredentials {
 
 type VroidHubUsagePermission = 'default' | 'disallow' | 'allow';
 
-interface PersonaVroidHubCharacterLicense {
+// VRM 0.0's conditions of use: a top-level `license` object on the character
+// model, snake_case, VRoid-Hub-specific vocabulary.
+interface PersonaVroidHubCharacterLicenseV0 {
+  spec_version: '0.0';
   characterization_allowed_user?: 'default' | 'author' | 'everyone';
   personal_commercial_use?: 'default' | 'disallow' | 'profit' | 'nonprofit';
   corporate_commercial_use?: VroidHubUsagePermission;
@@ -161,6 +164,26 @@ interface PersonaVroidHubCharacterLicense {
   violent_expression?: VroidHubUsagePermission;
   sexual_expression?: VroidHubUsagePermission;
 }
+
+// VRM 1.0's conditions of use: flat fields on vrm_meta (VRM1Meta), camelCase,
+// the VRM spec's own vocabulary — no shared shape with the V0 license above.
+// See node_modules/@pixiv/three-vrm-core/types/meta/VRM1Meta.d.ts.
+interface PersonaVroidHubCharacterLicenseV1 {
+  spec_version: '1.0';
+  avatarPermission?: 'onlyAuthor' | 'onlySeparatelyLicensedPerson' | 'everyone';
+  allowExcessivelyViolentUsage?: boolean;
+  allowExcessivelySexualUsage?: boolean;
+  commercialUsage?: 'personalNonProfit' | 'personalProfit' | 'corporation';
+  allowPoliticalOrReligiousUsage?: boolean;
+  allowAntisocialOrHateUsage?: boolean;
+  creditNotation?: 'required' | 'unnecessary';
+  allowRedistribution?: boolean;
+  modification?: 'prohibited' | 'allowModification' | 'allowModificationRedistribution';
+}
+
+type PersonaVroidHubCharacterLicense =
+  | PersonaVroidHubCharacterLicenseV0
+  | PersonaVroidHubCharacterLicenseV1;
 
 interface PersonaVroidHubCharacter {
   id: string;
