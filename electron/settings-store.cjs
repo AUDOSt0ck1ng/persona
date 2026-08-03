@@ -25,6 +25,11 @@ const DEFAULT_PACKAGED_LIBRARY_PATH = path.join(
 );
 const MIN_CHARACTER_SIZE = 0.7;
 const MAX_CHARACTER_SIZE = 1.6;
+const MIN_AVATAR_WINDOW_WIDTH = 320;
+const MAX_AVATAR_WINDOW_WIDTH = 3840;
+const MIN_AVATAR_WINDOW_HEIGHT = 480;
+const MAX_AVATAR_WINDOW_HEIGHT = 2160;
+const DEFAULT_AVATAR_WINDOW_SIZE = Object.freeze({ width: 430, height: 680 });
 const MAX_ASSET_BYTES = 200 * 1024 * 1024;
 const MAX_CUSTOM_MODELS = 50;
 const MAX_CUSTOM_ANIMATIONS = 100;
@@ -107,11 +112,28 @@ function sanitizeBodyTransitionSeconds(value) {
   return Math.round(seconds * 100) / 100;
 }
 
+function sanitizeAvatarWindowSize(value) {
+  const width = Math.round(Number(value?.width));
+  const height = Math.round(Number(value?.height));
+  if (
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width < MIN_AVATAR_WINDOW_WIDTH ||
+    width > MAX_AVATAR_WINDOW_WIDTH ||
+    height < MIN_AVATAR_WINDOW_HEIGHT ||
+    height > MAX_AVATAR_WINDOW_HEIGHT
+  ) {
+    return { ...DEFAULT_AVATAR_WINDOW_SIZE };
+  }
+  return { width, height };
+}
+
 function defaultState(packagedLibrary) {
   return {
     schema_version: SETTINGS_SCHEMA_VERSION,
     default_model_id: packagedLibrary.default_model_id,
     character_size: 1,
+    avatar_window: { ...DEFAULT_AVATAR_WINDOW_SIZE },
     developer_settings_enabled: false,
     body_transition_seconds: DEFAULT_BODY_TRANSITION_SECONDS,
     speaking_transition: defaultSpeakingTransition(),
@@ -418,6 +440,7 @@ function safeReadState(settingsPath, packagedLibrary) {
           ? parsed.default_model_id
           : fallback.default_model_id,
       character_size: parsed.character_size,
+      avatar_window: sanitizeAvatarWindowSize(parsed.avatar_window),
       developer_settings_enabled: parsed.developer_settings_enabled === true,
       body_transition_seconds: sanitizeBodyTransitionSeconds(
         parsed.body_transition_seconds,
@@ -643,6 +666,7 @@ function createSettingsStore({
         characterSize <= MAX_CHARACTER_SIZE
           ? characterSize
           : 1,
+      avatar_window: sanitizeAvatarWindowSize(state.avatar_window),
       developer_settings_enabled: state.developer_settings_enabled === true,
       body_transition_seconds: sanitizeBodyTransitionSeconds(
         state.body_transition_seconds,
@@ -907,6 +931,32 @@ function createSettingsStore({
     return getSnapshot();
   }
 
+  function setAvatarWindowSize(width, height) {
+    const nextWidth = Math.round(Number(width));
+    if (
+      !Number.isFinite(nextWidth) ||
+      nextWidth < MIN_AVATAR_WINDOW_WIDTH ||
+      nextWidth > MAX_AVATAR_WINDOW_WIDTH
+    ) {
+      throw new Error(
+        `Avatar window width must be between ${MIN_AVATAR_WINDOW_WIDTH} and ${MAX_AVATAR_WINDOW_WIDTH}.`,
+      );
+    }
+    const nextHeight = Math.round(Number(height));
+    if (
+      !Number.isFinite(nextHeight) ||
+      nextHeight < MIN_AVATAR_WINDOW_HEIGHT ||
+      nextHeight > MAX_AVATAR_WINDOW_HEIGHT
+    ) {
+      throw new Error(
+        `Avatar window height must be between ${MIN_AVATAR_WINDOW_HEIGHT} and ${MAX_AVATAR_WINDOW_HEIGHT}.`,
+      );
+    }
+    state.avatar_window = { width: nextWidth, height: nextHeight };
+    writeState();
+    return getSnapshot();
+  }
+
   function setSpeakingTransition(value) {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
       throw new Error("Speaking transition settings must be an object.");
@@ -1101,6 +1151,7 @@ function createSettingsStore({
     resetPackagedAnimations,
     resetDeveloperSettings,
     resolveAssetRequest,
+    setAvatarWindowSize,
     setCharacterSize,
     setSpeakingTransition,
     setBodyTransitionSeconds,
@@ -1114,10 +1165,15 @@ function createSettingsStore({
 
 module.exports = {
   ANIMATION_NAME_PATTERN,
+  DEFAULT_AVATAR_WINDOW_SIZE,
   DEFAULT_MODEL_LIGHTING,
   DEFAULT_SPEAKING_TRANSITION,
   DEFAULT_PACKAGED_LIBRARY_PATH,
+  MAX_AVATAR_WINDOW_WIDTH,
+  MAX_AVATAR_WINDOW_HEIGHT,
   MAX_CHARACTER_SIZE,
+  MIN_AVATAR_WINDOW_WIDTH,
+  MIN_AVATAR_WINDOW_HEIGHT,
   MIN_CHARACTER_SIZE,
   SETTINGS_SCHEMA_VERSION,
   createSettingsStore,

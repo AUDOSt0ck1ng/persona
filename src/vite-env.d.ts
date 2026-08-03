@@ -96,10 +96,16 @@ interface PersonaVoiceSourceCatalog {
   sources: PersonaVoiceSource[];
 }
 
+interface PersonaAvatarWindowSize {
+  width: number;
+  height: number;
+}
+
 interface PersonaSettingsSnapshot {
   schema_version: number;
   default_model_id: string | null;
   character_size: number;
+  avatar_window: PersonaAvatarWindowSize;
   developer_settings_enabled: boolean;
   body_transition_seconds: number;
   speaking_transition: PersonaSpeakingTransitionSettings;
@@ -148,6 +154,7 @@ interface Window {
   personaBridge?: {
     getSnapshot(): Promise<AvatarBridgeEvent | null>;
     hide(): void;
+    moveBy(dx: number, dy: number): void;
     subscribe(listener: (event: AvatarBridgeEvent) => void): () => void;
   };
   personaSettings?: {
@@ -174,6 +181,10 @@ interface Window {
     deleteModel(modelId: string): Promise<PersonaSettingsSnapshot>;
     setDefaultModel(modelId: string): Promise<PersonaSettingsSnapshot>;
     setCharacterSize(size: number): Promise<PersonaSettingsSnapshot>;
+    setAvatarWindowSize(
+      width: number,
+      height: number,
+    ): Promise<PersonaSettingsSnapshot>;
     setSpeakingTransition(
       transition: PersonaSpeakingTransitionSettings,
     ): Promise<PersonaSettingsSnapshot>;

@@ -1689,6 +1689,16 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
+.avatar-window-size-row {
+  display: flex;
+  gap: 12px;
+}
+
+.avatar-window-size-row label {
+  flex: 1;
+  margin-bottom: 0;
+}
+
 /* --- Lighting controls -------------------------------------------------- */
 
 .lighting-panel {

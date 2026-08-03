@@ -55,6 +55,15 @@ const SYSTEM_ACTIONS: PersonaAnimationSettings[] = [
   },
 ];
 
+export const MIN_AVATAR_WINDOW_WIDTH = 320;
+export const MAX_AVATAR_WINDOW_WIDTH = 3840;
+export const MIN_AVATAR_WINDOW_HEIGHT = 480;
+export const MAX_AVATAR_WINDOW_HEIGHT = 2160;
+export const DEFAULT_AVATAR_WINDOW_SIZE: PersonaAvatarWindowSize = {
+  width: 430,
+  height: 680,
+};
+
 export const DEFAULT_LIGHTING: PersonaLightingSettings = {
   tone_mapping: 'none',
   exposure: 1,
@@ -90,6 +99,7 @@ export const SETTINGS_FALLBACK: PersonaSettingsSnapshot = {
   schema_version: 7,
   default_model_id: null,
   character_size: 1,
+  avatar_window: { ...DEFAULT_AVATAR_WINDOW_SIZE },
   developer_settings_enabled: false,
   body_transition_seconds: DEFAULT_BODY_TRANSITION_SECONDS,
   speaking_transition: { ...DEFAULT_SPEAKING_TRANSITION },
