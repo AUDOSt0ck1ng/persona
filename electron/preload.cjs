@@ -64,6 +64,11 @@ contextBridge.exposeInMainWorld("personaSettings", {
     ipcRenderer.invoke("persona:settings-enable-developer"),
   resetDeveloperSettings: () =>
     ipcRenderer.invoke("persona:settings-reset-developer"),
+  setVroidHubPlaintextStorageAllowed: (allowed) =>
+    ipcRenderer.invoke(
+      "persona:settings-set-vroid-plaintext-storage",
+      allowed,
+    ),
   setVoiceSource: (voiceSource) =>
     ipcRenderer.invoke("persona:settings-set-voice-source", voiceSource),
   listVoiceSources: () =>

@@ -173,6 +173,7 @@ function defaultState(packagedLibrary) {
     character_size: 1,
     avatar_window: { ...DEFAULT_AVATAR_WINDOW_SIZE },
     developer_settings_enabled: false,
+    vroid_hub_allow_plaintext_storage: false,
     body_transition_ms: DEFAULT_BODY_TRANSITION_MS,
     speaking_debounce_ms: DEFAULT_SPEAKING_DEBOUNCE_MS,
     idle_interim_ms: DEFAULT_IDLE_INTERIM_MS,
@@ -492,6 +493,8 @@ function safeReadState(settingsPath, packagedLibrary) {
       character_size: parsed.character_size,
       avatar_window: sanitizeAvatarWindowSize(parsed.avatar_window),
       developer_settings_enabled: parsed.developer_settings_enabled === true,
+      vroid_hub_allow_plaintext_storage:
+        parsed.vroid_hub_allow_plaintext_storage === true,
       body_transition_ms: sanitizeBodyTransitionMs(
         usesLegacySchedulerUnits
           ? Number(parsed.body_transition_seconds) * 1000
@@ -748,6 +751,8 @@ function createSettingsStore({
           : 1,
       avatar_window: sanitizeAvatarWindowSize(state.avatar_window),
       developer_settings_enabled: state.developer_settings_enabled === true,
+      vroid_hub_allow_plaintext_storage:
+        state.vroid_hub_allow_plaintext_storage === true,
       body_transition_ms: sanitizeBodyTransitionMs(
         state.body_transition_ms,
       ),
@@ -1151,6 +1156,13 @@ function createSettingsStore({
     state.speaking_debounce_ms = DEFAULT_SPEAKING_DEBOUNCE_MS;
     state.idle_interim_ms = DEFAULT_IDLE_INTERIM_MS;
     state.speaking_transition = defaultSpeakingTransition();
+    state.vroid_hub_allow_plaintext_storage = false;
+    writeState();
+    return getSnapshot();
+  }
+
+  function setVroidHubPlaintextStorageAllowed(value) {
+    state.vroid_hub_allow_plaintext_storage = value === true;
     writeState();
     return getSnapshot();
   }
@@ -1297,6 +1309,7 @@ function createSettingsStore({
     enableDeveloperSettings,
     resetPackagedAnimations,
     resetDeveloperSettings,
+    setVroidHubPlaintextStorageAllowed,
     resolveAssetRequest,
     setActiveHubModel,
     setAvatarWindowSize,

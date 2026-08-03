@@ -29,6 +29,7 @@ import {
   THEME_OPTIONS,
   type ThemePreference,
 } from '../theme';
+import { vroidLicenseRows } from '../vroid-license-fields';
 
 type SettingsSection =
   | 'models'
@@ -60,73 +61,11 @@ interface ConfirmationRequest {
   title: string;
 }
 
-// Labels mirror VRoid Hub's own conditions-of-use wording, per its developer
-// guidelines for displaying model data conditions of use in a linked app.
-const VROID_LICENSE_FIELDS: Array<{
-  key: keyof PersonaVroidHubCharacterLicense;
-  label: string;
-  values: Record<string, string>;
-}> = [
-  {
-    key: 'characterization_allowed_user',
-    label: 'Who may perform as this character',
-    values: { default: 'Platform default', author: 'Author only', everyone: 'Everyone' },
-  },
-  {
-    key: 'personal_commercial_use',
-    label: 'Personal commercial use',
-    values: {
-      default: 'Platform default',
-      disallow: 'Not allowed',
-      profit: 'Allowed (for-profit)',
-      nonprofit: 'Allowed (non-profit only)',
-    },
-  },
-  {
-    key: 'corporate_commercial_use',
-    label: 'Corporate commercial use',
-    values: { default: 'Platform default', disallow: 'Not allowed', allow: 'Allowed' },
-  },
-  {
-    key: 'modification',
-    label: 'Modification',
-    values: { default: 'Platform default', disallow: 'Not allowed', allow: 'Allowed' },
-  },
-  {
-    key: 'redistribution',
-    label: 'Redistribution',
-    values: { default: 'Platform default', disallow: 'Not allowed', allow: 'Allowed' },
-  },
-  {
-    key: 'credit',
-    label: 'Credit',
-    values: {
-      default: 'Platform default',
-      necessary: 'Required',
-      unnecessary: 'Not required',
-    },
-  },
-  {
-    key: 'violent_expression',
-    label: 'Violent expression',
-    values: { default: 'Platform default', disallow: 'Not allowed', allow: 'Allowed' },
-  },
-  {
-    key: 'sexual_expression',
-    label: 'Sexual expression',
-    values: { default: 'Platform default', disallow: 'Not allowed', allow: 'Allowed' },
-  },
-];
-
 function vroidConditionsOfUse(
   character: PersonaVroidHubCharacter,
   onOpenHubPage: () => void,
 ): ReactNode {
-  const rows = VROID_LICENSE_FIELDS.map(({ key, label, values }) => {
-    const raw = character.license?.[key];
-    if (raw == null) return null;
-    return { label, value: values[raw] ?? raw };
-  }).filter((row): row is { label: string; value: string } => row != null);
+  const rows = vroidLicenseRows(character.license);
 
   return (
     <>
@@ -1133,6 +1072,23 @@ export function SettingsPage() {
     );
   };
 
+  const previewVroidHubPlaintextStorageAllowed = (allowed: boolean) => {
+    setSettings((current) => ({
+      ...current,
+      vroid_hub_allow_plaintext_storage: allowed,
+    }));
+  };
+
+  const saveVroidHubPlaintextStorageAllowed = async (allowed: boolean) => {
+    if (!bridge) return;
+    await persistAppearance(
+      () => bridge.setVroidHubPlaintextStorageAllowed(allowed),
+      allowed
+        ? 'VRoid Hub Linux override enabled.'
+        : 'VRoid Hub Linux override disabled.',
+    );
+  };
+
   const requestDeveloperSettingsAccess = () => {
     if (!bridge || settings.developer_settings_enabled) return;
     openConfirmation({
@@ -1291,6 +1247,8 @@ export function SettingsPage() {
     settings.speaking_debounce_ms !==
       SETTINGS_FALLBACK.speaking_debounce_ms ||
     settings.idle_interim_ms !== SETTINGS_FALLBACK.idle_interim_ms ||
+    settings.vroid_hub_allow_plaintext_storage !==
+      SETTINGS_FALLBACK.vroid_hub_allow_plaintext_storage ||
     (['entry_ms', 'exit_ms'] as const).some((field) =>
       settings.speaking_transition[field].some(
         (milliseconds, index) =>
@@ -2564,6 +2522,29 @@ export function SettingsPage() {
                         </p>
                       </div>
                     </div>
+
+                    <div className="lighting-toggle-row">
+                      <span>VRoid Hub Linux override</span>
+                      <button
+                        aria-checked={settings.vroid_hub_allow_plaintext_storage}
+                        className={`toggle-switch${settings.vroid_hub_allow_plaintext_storage ? ' active' : ''}`}
+                        disabled={busy || !bridge}
+                        onClick={() => {
+                          const next =
+                            !settings.vroid_hub_allow_plaintext_storage;
+                          previewVroidHubPlaintextStorageAllowed(next);
+                          void saveVroidHubPlaintextStorageAllowed(next);
+                        }}
+                        role="switch"
+                        type="button"
+                      />
+                    </div>
+                    <p className="theme-note">
+                      On Linux, this allows VRoid Hub authentication to keep
+                      working even when Electron falls back to plaintext
+                      credential storage. Leave it off to require a secure
+                      keyring backend.
+                    </p>
 
                     {(
                       [

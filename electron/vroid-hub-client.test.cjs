@@ -104,6 +104,66 @@ test("lists the account's own models and eligible hearted models, filtering inel
   );
 });
 
+test("extracts VRM 0.0 and VRM 1.0 conditions of use in their own native shapes", async (context) => {
+  const server = await startFakeHub(context, {
+    onRequest(request, response) {
+      if (request.url.startsWith("/api/account/character_models")) {
+        return json(response, 200, {
+          data: [
+            characterModel({
+              id: "vrm0-model",
+              license: { credit: "necessary", personal_commercial_use: "profit" },
+            }),
+            characterModel({
+              id: "vrm1-model",
+              latest_character_model_version: {
+                spec_version: "1.0",
+                vrm_meta: {
+                  commercialUsage: "personalProfit",
+                  creditNotation: "required",
+                  allowRedistribution: false,
+                },
+              },
+            }),
+            characterModel({ id: "no-license-model" }),
+          ],
+        });
+      }
+      if (request.url.startsWith("/api/hearts")) {
+        return json(response, 200, { data: [] });
+      }
+      response.writeHead(404);
+      response.end();
+    },
+  });
+  const client = createVroidHubClient({
+    applicationId: "app-123",
+    baseUrl: `http://127.0.0.1:${server.address().port}`,
+  });
+
+  const characters = await client.listCharacters(TOKEN);
+  const byId = Object.fromEntries(characters.map((c) => [c.id, c.license]));
+
+  assert.deepEqual(byId["vrm0-model"], {
+    spec_version: "0.0",
+    credit: "necessary",
+    personal_commercial_use: "profit",
+  });
+  assert.deepEqual(byId["vrm1-model"], {
+    spec_version: "1.0",
+    avatarPermission: undefined,
+    allowExcessivelyViolentUsage: undefined,
+    allowExcessivelySexualUsage: undefined,
+    commercialUsage: "personalProfit",
+    allowPoliticalOrReligiousUsage: undefined,
+    allowAntisocialOrHateUsage: undefined,
+    creditNotation: "required",
+    allowRedistribution: false,
+    modification: undefined,
+  });
+  assert.equal(byId["no-license-model"], null);
+});
+
 test("downloads a licensed character model through the redirect flow", async (context) => {
   const fileBytes = Buffer.from("glTFmodelbytes");
   const server = await startFakeHub(context, {
