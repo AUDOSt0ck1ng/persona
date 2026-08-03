@@ -56,9 +56,9 @@ const SYSTEM_ACTIONS: PersonaAnimationSettings[] = [
 ];
 
 export const MIN_AVATAR_WINDOW_WIDTH = 320;
-export const MAX_AVATAR_WINDOW_WIDTH = 3840;
+export const MAX_AVATAR_WINDOW_WIDTH = 2160;
 export const MIN_AVATAR_WINDOW_HEIGHT = 480;
-export const MAX_AVATAR_WINDOW_HEIGHT = 2160;
+export const MAX_AVATAR_WINDOW_HEIGHT = 3840;
 export const DEFAULT_AVATAR_WINDOW_SIZE: PersonaAvatarWindowSize = {
   width: 430,
   height: 680,
