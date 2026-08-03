@@ -843,7 +843,8 @@ if (!app.requestSingleInstanceLock()) {
     // Playback failures (e.g. an incompatible VRMA file) happen in the avatar
     // window, which has no notice UI of its own; forward them to the settings
     // window so the user actually finds out something went wrong.
-    ipcMain.on("persona:report-error", (_event, message) => {
+    ipcMain.on("persona:report-error", (event, message) => {
+      if (event.sender !== avatarWindow?.webContents) return;
       if (typeof message !== "string" || !message.trim()) return;
       if (!settingsWindow || settingsWindow.isDestroyed()) return;
       settingsWindow.webContents.send("persona:notice", message);
