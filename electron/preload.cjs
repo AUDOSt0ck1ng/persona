@@ -75,3 +75,21 @@ contextBridge.exposeInMainWorld("personaSettings", {
     return () => ipcRenderer.off("persona:settings-updated", handler);
   },
 });
+
+contextBridge.exposeInMainWorld("personaVroidHub", {
+  getStatus: () => ipcRenderer.invoke("persona:vroid-get-status"),
+  getCredentials: () => ipcRenderer.invoke("persona:vroid-get-credentials"),
+  setCredentials: (clientId, clientSecret) =>
+    ipcRenderer.invoke("persona:vroid-set-credentials", clientId, clientSecret),
+  clearCredentials: () => ipcRenderer.invoke("persona:vroid-clear-credentials"),
+  connect: () => ipcRenderer.invoke("persona:vroid-connect"),
+  disconnect: () => ipcRenderer.invoke("persona:vroid-disconnect"),
+  listCharacters: () => ipcRenderer.invoke("persona:vroid-list-characters"),
+  selectCharacter: (characterId) =>
+    ipcRenderer.invoke("persona:vroid-select-character", characterId),
+  subscribe: (listener) => {
+    const handler = (_event, status) => listener(status);
+    ipcRenderer.on("persona:vroid-status-updated", handler);
+    return () => ipcRenderer.off("persona:vroid-status-updated", handler);
+  },
+});

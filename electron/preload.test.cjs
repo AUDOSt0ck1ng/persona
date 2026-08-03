@@ -52,8 +52,12 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
   const { exposed, invocations, listeners, sent } = loadPreload();
   const bridge = exposed.get("personaBridge");
   const settings = exposed.get("personaSettings");
+  const vroidHub = exposed.get("personaVroidHub");
 
-  assert.deepEqual([...exposed.keys()], ["personaBridge", "personaSettings"]);
+  assert.deepEqual(
+    [...exposed.keys()],
+    ["personaBridge", "personaSettings", "personaVroidHub"],
+  );
   await bridge.getSnapshot();
   bridge.hide();
   await settings.get();
@@ -94,6 +98,14 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
   await settings.resetModelLighting("model-id");
   await settings.getMcpStatus();
   settings.setWindowTheme("light");
+  await vroidHub.getStatus();
+  await vroidHub.getCredentials();
+  await vroidHub.setCredentials("client-id", "client-secret");
+  await vroidHub.clearCredentials();
+  await vroidHub.connect();
+  await vroidHub.disconnect();
+  await vroidHub.listCharacters();
+  await vroidHub.selectCharacter("character-id");
 
   assert.deepEqual(invocations, [
     ["persona:get-snapshot"],
@@ -149,6 +161,14 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
     ],
     ["persona:settings-reset-model-lighting", "model-id"],
     ["persona:settings-get-mcp-status"],
+    ["persona:vroid-get-status"],
+    ["persona:vroid-get-credentials"],
+    ["persona:vroid-set-credentials", "client-id", "client-secret"],
+    ["persona:vroid-clear-credentials"],
+    ["persona:vroid-connect"],
+    ["persona:vroid-disconnect"],
+    ["persona:vroid-list-characters"],
+    ["persona:vroid-select-character", "character-id"],
   ]);
   assert.deepEqual(sent, [
     ["persona:hide"],
@@ -162,4 +182,12 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
   unsubscribe();
   assert.deepEqual(snapshots, [{ character_size: 1.3 }]);
   assert.equal(listeners.get("persona:settings-updated").size, 0);
+
+  const statuses = [];
+  const unsubscribeVroid = vroidHub.subscribe((status) => statuses.push(status));
+  const vroidHandler = [...listeners.get("persona:vroid-status-updated")][0];
+  vroidHandler({}, { configured: true, connected: true });
+  unsubscribeVroid();
+  assert.deepEqual(statuses, [{ configured: true, connected: true }]);
+  assert.equal(listeners.get("persona:vroid-status-updated").size, 0);
 });

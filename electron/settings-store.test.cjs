@@ -183,6 +183,74 @@ test("imports, persists, resolves, and deletes user assets", (context) => {
   );
 });
 
+test("holds a hub-sourced model in memory only, never in settings.json", (context) => {
+  const { root, userDataPath, packagedLibraryPath } = fixture(context);
+  const store = createSettingsStore({ userDataPath, packagedLibraryPath });
+  const localModelPath = path.join(root, "local.vrm");
+  writeGlb(localModelPath);
+  const localModel = store
+    .importModel({ filePath: localModelPath, model_name: "Local Character" })
+    .models.find((candidate) => candidate.origin === "user");
+
+  const buffer = Buffer.alloc(16);
+  buffer.write("glTF", 0, "ascii");
+  buffer.writeUInt32LE(2, 4);
+  buffer.writeUInt32LE(buffer.length, 8);
+
+  let snapshot = store.setActiveHubModel(buffer, { model_name: "Hub Character" });
+  const hubModel = snapshot.models.find((candidate) => candidate.origin === "hub");
+  assert.ok(hubModel);
+  assert.equal(hubModel.model_name, "Hub Character");
+  assert.equal(hubModel.removable, false);
+  // Selecting the hub character becomes the active model immediately...
+  assert.equal(snapshot.default_model_id, hubModel.id);
+
+  const resolved = store.resolveAssetRequest(hubModel.asset_url);
+  assert.ok(resolved);
+  assert.equal(Buffer.isBuffer(resolved.buffer), true);
+  assert.equal(resolved.buffer.equals(buffer), true);
+  assert.equal(store.resolveAssetRequest("persona-asset://hub/not-the-id.vrm"), null);
+
+  // ...but that's tracked in memory only: the persisted default_model_id
+  // still points at the local model the user had selected before, never at
+  // the hub model's ephemeral id.
+  const settingsPath = path.join(userDataPath, "settings.json");
+  const persisted = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+  assert.equal(persisted.default_model_id, localModel.id);
+  assert.equal("models" in persisted && persisted.models.some(
+    (model) => model.id === hubModel.id,
+  ), false);
+
+  snapshot = store.clearActiveHubModel();
+  assert.equal(snapshot.models.some((candidate) => candidate.origin === "hub"), false);
+  assert.equal(store.resolveAssetRequest(hubModel.asset_url), null);
+  // The user's prior local selection is restored, not lost, once the hub
+  // model is gone.
+  assert.equal(snapshot.default_model_id, localModel.id);
+
+  const reloaded = createSettingsStore({ userDataPath, packagedLibraryPath }).getSnapshot();
+  assert.equal(reloaded.models.some((candidate) => candidate.origin === "hub"), false);
+  assert.equal(reloaded.default_model_id, localModel.id);
+});
+
+test("rejects a hub download that is not a valid glTF binary", (context) => {
+  const { userDataPath, packagedLibraryPath } = fixture(context);
+  const store = createSettingsStore({ userDataPath, packagedLibraryPath });
+
+  assert.throws(
+    () => store.setActiveHubModel(Buffer.from("this is not a glb file!"), { model_name: "Bad" }),
+    /valid VRM/,
+  );
+  assert.throws(
+    () => store.setActiveHubModel(Buffer.alloc(0), { model_name: "Empty" }),
+    /empty or invalid/,
+  );
+  assert.equal(
+    store.getSnapshot().models.some((candidate) => candidate.origin === "hub"),
+    false,
+  );
+});
+
 test("keeps user library records when migrating the earlier settings schema", (context) => {
   const { userDataPath, packagedLibraryPath } = fixture(context);
   const modelId = "11111111-1111-4111-8111-111111111111";
