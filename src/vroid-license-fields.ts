@@ -3,147 +3,172 @@ export interface VroidLicenseRow {
   value: string;
 }
 
-// Labels mirror VRoid Hub's own conditions-of-use wording, per its developer
-// guidelines for displaying model data conditions of use in a linked app.
-// VRM 0.0 models expose these as a top-level `license` object; VRM 1.0
-// models use an entirely different (camelCase, differently-valued) set of
-// fields on vrm_meta directly — see VROID_LICENSE_FIELDS_V1 below. There's
-// no shared vocabulary between the two, so each gets its own table rather
-// than forcing one into the other's shape.
-const VROID_LICENSE_FIELDS_V0: Array<{
-  key: keyof PersonaVroidHubCharacterLicenseV0;
+interface VroidLicenseField<Key extends string = string> {
+  key: Key;
   label: string;
   values: Record<string, string>;
-}> = [
+}
+
+const ALLOW_VALUES = {
+  default: 'Not set',
+  allow: 'Allow',
+  disallow: 'Do not allow',
+};
+
+// Keep the labels, ordering, and value wording aligned with VRoid Hub's
+// conditions-of-use display guidelines. VRM 0.0 and VRM 1.0 expose different
+// source shapes, so each version has its own display table.
+const VROID_LICENSE_FIELDS_V0: VroidLicenseField<
+  keyof PersonaVroidHubCharacterLicenseV0
+>[] = [
   {
     key: 'characterization_allowed_user',
-    label: 'Who may perform as this character',
-    values: { default: 'Platform default', author: 'Author only', everyone: 'Everyone' },
+    label: 'Avatar use',
+    values: { default: 'Not set', author: 'Do not allow', everyone: 'Allow' },
   },
   {
-    key: 'personal_commercial_use',
-    label: 'Personal commercial use',
-    values: {
-      default: 'Platform default',
-      disallow: 'Not allowed',
-      profit: 'Allowed (for-profit)',
-      nonprofit: 'Allowed (non-profit only)',
-    },
+    key: 'violent_expression',
+    label: 'Violent acts',
+    values: ALLOW_VALUES,
+  },
+  {
+    key: 'sexual_expression',
+    label: 'Sexual acts',
+    values: ALLOW_VALUES,
   },
   {
     key: 'corporate_commercial_use',
-    label: 'Corporate commercial use',
-    values: { default: 'Platform default', disallow: 'Not allowed', allow: 'Allowed' },
+    label: 'Corporate use',
+    values: ALLOW_VALUES,
   },
   {
-    key: 'modification',
-    label: 'Modification',
-    values: { default: 'Platform default', disallow: 'Not allowed', allow: 'Allowed' },
+    key: 'personal_commercial_use',
+    label: 'Individual commercial use',
+    values: {
+      default: 'Not set',
+      disallow: 'Do not allow',
+      profit: 'Allow',
+      nonprofit: 'Non-profit activities only',
+    },
   },
   {
     key: 'redistribution',
     label: 'Redistribution',
-    values: { default: 'Platform default', disallow: 'Not allowed', allow: 'Allowed' },
+    values: ALLOW_VALUES,
+  },
+  {
+    key: 'modification',
+    label: 'Alterations',
+    values: ALLOW_VALUES,
   },
   {
     key: 'credit',
-    label: 'Credit',
+    label: 'Attribution',
     values: {
-      default: 'Platform default',
+      default: 'Not set',
       necessary: 'Required',
       unnecessary: 'Not required',
     },
   },
-  {
-    key: 'violent_expression',
-    label: 'Violent expression',
-    values: { default: 'Platform default', disallow: 'Not allowed', allow: 'Allowed' },
-  },
-  {
-    key: 'sexual_expression',
-    label: 'Sexual expression',
-    values: { default: 'Platform default', disallow: 'Not allowed', allow: 'Allowed' },
-  },
 ];
 
-// VRM 1.0's vrm_meta fields (VRM1Meta), mixing enums and booleans — see
-// node_modules/@pixiv/three-vrm-core/types/meta/VRM1Meta.d.ts. Boolean
-// values are looked up via their String() form ("true"/"false").
-const VROID_LICENSE_FIELDS_V1: Array<{
-  key: keyof PersonaVroidHubCharacterLicenseV1;
-  label: string;
-  values: Record<string, string>;
-}> = [
+const BOOLEAN_PERMISSION_VALUES = {
+  true: 'Allow',
+  false: 'Do not allow',
+};
+
+const VROID_LICENSE_FIELDS_V1: VroidLicenseField<
+  keyof PersonaVroidHubCharacterLicenseV1
+>[] = [
   {
     key: 'avatarPermission',
-    label: 'Who may perform as this character',
+    label: 'Avatar use',
     values: {
-      onlyAuthor: 'Author only',
-      onlySeparatelyLicensedPerson: 'Requires a separate license',
-      everyone: 'Everyone',
+      onlyAuthor: 'Do not allow',
+      onlySeparatelyLicensedPerson: 'Do not allow',
+      everyone: 'Allow',
+    },
+  },
+  {
+    key: 'allowExcessivelyViolentUsage',
+    label: 'Violent acts',
+    values: BOOLEAN_PERMISSION_VALUES,
+  },
+  {
+    key: 'allowExcessivelySexualUsage',
+    label: 'Sexual acts',
+    values: BOOLEAN_PERMISSION_VALUES,
+  },
+  {
+    key: 'allowPoliticalOrReligiousUsage',
+    label: 'Political/religious acts',
+    values: BOOLEAN_PERMISSION_VALUES,
+  },
+  {
+    key: 'allowAntisocialOrHateUsage',
+    label: 'Antisocial/hateful acts',
+    values: BOOLEAN_PERMISSION_VALUES,
+  },
+  {
+    key: 'commercialUsage',
+    label: 'Corporate use',
+    values: {
+      personalNonProfit: 'Do not allow',
+      personalProfit: 'Do not allow',
+      corporation: 'Allow',
     },
   },
   {
     key: 'commercialUsage',
-    label: 'Commercial use',
+    label: 'Individual commercial use',
     values: {
-      personalNonProfit: 'Personal, non-profit only',
-      personalProfit: 'Personal, for-profit allowed',
-      corporation: 'Corporate use allowed',
+      personalNonProfit: 'Do not allow',
+      personalProfit: 'Allow',
+      corporation: 'Allow',
+    },
+  },
+  {
+    key: 'allowRedistribution',
+    label: 'Redistribution',
+    values: BOOLEAN_PERMISSION_VALUES,
+  },
+  {
+    key: 'modification',
+    label: 'Alterations',
+    values: {
+      prohibited: 'Do not allow',
+      allowModification: 'Allow',
+      allowModificationRedistribution: 'Allow',
     },
   },
   {
     key: 'modification',
-    label: 'Modification',
+    label: 'Redistribution of altered model',
     values: {
-      prohibited: 'Not allowed',
-      allowModification: 'Allowed (no redistribution)',
-      allowModificationRedistribution: 'Allowed, including redistribution',
+      prohibited: 'Do not allow',
+      allowModification: 'Do not allow',
+      allowModificationRedistribution: 'Allow',
     },
   },
   {
     key: 'creditNotation',
-    label: 'Credit',
+    label: 'Attribution',
     values: { required: 'Required', unnecessary: 'Not required' },
-  },
-  {
-    key: 'allowRedistribution',
-    label: 'Redistribution (unmodified)',
-    values: { true: 'Allowed', false: 'Not allowed' },
-  },
-  {
-    key: 'allowExcessivelyViolentUsage',
-    label: 'Excessively violent expression',
-    values: { true: 'Allowed', false: 'Not allowed' },
-  },
-  {
-    key: 'allowExcessivelySexualUsage',
-    label: 'Excessively sexual expression',
-    values: { true: 'Allowed', false: 'Not allowed' },
-  },
-  {
-    key: 'allowPoliticalOrReligiousUsage',
-    label: 'Political or religious usage',
-    values: { true: 'Allowed', false: 'Not allowed' },
-  },
-  {
-    key: 'allowAntisocialOrHateUsage',
-    label: 'Antisocial or hate speech usage',
-    values: { true: 'Allowed', false: 'Not allowed' },
   },
 ];
 
 export function vroidLicenseRows(
   license: PersonaVroidHubCharacterLicense | null | undefined,
 ): VroidLicenseRow[] {
-  const fields = license?.spec_version === '1.0' ? VROID_LICENSE_FIELDS_V1 : VROID_LICENSE_FIELDS_V0;
-  return fields
-    .map(({ key, label, values }) => {
-      // license's two variants share no keys, so this cast is safe per the
-      // `fields` table already matching license?.spec_version above.
-      const raw = (license as Record<string, unknown> | null | undefined)?.[key as string];
-      if (raw == null) return null;
-      return { label, value: values[String(raw)] ?? String(raw) };
-    })
-    .filter((row): row is VroidLicenseRow => row != null);
+  if (!license) return [];
+
+  const fields: VroidLicenseField[] =
+    license.spec_version === '1.0' ? VROID_LICENSE_FIELDS_V1 : VROID_LICENSE_FIELDS_V0;
+  const values = license as unknown as Record<string, unknown>;
+
+  return fields.map(({ key, label, values: displayValues }) => {
+    const raw = values[key];
+    if (raw == null) return { label, value: 'Not set' };
+    return { label, value: displayValues[String(raw)] ?? String(raw) };
+  });
 }
