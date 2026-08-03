@@ -840,6 +840,14 @@ if (!app.requestSingleInstanceLock()) {
       }),
     );
     ipcMain.on("persona:hide", () => void hideOverlay());
+    // Playback failures (e.g. an incompatible VRMA file) happen in the avatar
+    // window, which has no notice UI of its own; forward them to the settings
+    // window so the user actually finds out something went wrong.
+    ipcMain.on("persona:report-error", (_event, message) => {
+      if (typeof message !== "string" || !message.trim()) return;
+      if (!settingsWindow || settingsWindow.isDestroyed()) return;
+      settingsWindow.webContents.send("persona:notice", message);
+    });
     // The resolved theme lives in renderer storage, so the window chrome can
     // only be corrected once the settings renderer reports it. Accepts the two
     // known theme names and never a caller-supplied colour.

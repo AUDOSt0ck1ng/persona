@@ -239,6 +239,11 @@ export function SettingsPage() {
   }, [bridge]);
 
   useEffect(() => {
+    if (!bridge) return;
+    return bridge.subscribeNotice(setNotice);
+  }, [bridge]);
+
+  useEffect(() => {
     setVoiceMode(settings.voice_source.mode);
     setVoicePattern(settings.voice_source.process_pattern ?? '');
   }, [settings.voice_source.mode, settings.voice_source.process_pattern]);

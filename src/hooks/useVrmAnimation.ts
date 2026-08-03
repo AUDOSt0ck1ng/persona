@@ -285,6 +285,7 @@ export function useVrmAnimation(
         ];
       }
       speakingBlend.current = null;
+      let url: string | null | undefined;
       try {
         const sequenceUrls = speakingChunkSequenceUrls(
           type,
@@ -305,7 +306,7 @@ export function useVrmAnimation(
           return;
         }
         const uniqueAnimationUrls = [...new Set(animationUrls)];
-        const url = randomAnimationUrl(
+        url = randomAnimationUrl(
           uniqueAnimationUrls,
           previousAnimation.current.get(type) ?? null,
         );
@@ -348,6 +349,12 @@ export function useVrmAnimation(
         currentType.current = type;
       } catch (error) {
         console.warn('[persona] animation load failed', error);
+        const detail = error instanceof Error ? error.message : String(error);
+        const filename = url?.split(/[/\\]/).pop();
+        const source = filename ? ` (${filename})` : '';
+        window.personaBridge?.reportError(
+          `Couldn't play that animation${source}: ${detail}`,
+        );
         if (generation === requestGeneration.current && playback === 'once') {
           onComplete?.();
         }

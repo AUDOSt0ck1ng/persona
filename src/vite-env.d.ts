@@ -148,6 +148,7 @@ interface Window {
   personaBridge?: {
     getSnapshot(): Promise<AvatarBridgeEvent | null>;
     hide(): void;
+    reportError(message: string): void;
     subscribe(listener: (event: AvatarBridgeEvent) => void): () => void;
   };
   personaSettings?: {
@@ -194,5 +195,6 @@ interface Window {
     subscribe(
       listener: (snapshot: PersonaSettingsSnapshot) => void,
     ): () => void;
+    subscribeNotice(listener: (message: string) => void): () => void;
   };
 }
