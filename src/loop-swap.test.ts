@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
+import type { PlayableAnimationType } from './animation-catalog';
 import { createLoopSwapHandler, type LoopSelection } from './loop-swap';
 
 function createHarness() {
@@ -8,7 +9,7 @@ function createHarness() {
   const current = { current: initialAction as THREE.AnimationAction | null };
   const requestGeneration = { current: 0 };
   const bodyTransitionSeconds = { current: 0.5 };
-  const previousAnimation = new Map<string, string>();
+  const previousAnimation = new Map<PlayableAnimationType, string>();
   const activeLoopSelection: { current: LoopSelection | null } = {
     current: {
       type: 'IDLE',
