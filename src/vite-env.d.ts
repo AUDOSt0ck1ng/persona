@@ -31,8 +31,8 @@ interface PersonaLightingSettings {
 }
 
 interface PersonaSpeakingTransitionSettings {
-  entry_factor: readonly [number, number];
-  exit_factor: readonly [number, number];
+  entry_ms: readonly [number, number];
+  exit_ms: readonly [number, number];
 }
 
 type PersonaAnimationType =
@@ -107,7 +107,9 @@ interface PersonaSettingsSnapshot {
   character_size: number;
   avatar_window: PersonaAvatarWindowSize;
   developer_settings_enabled: boolean;
-  body_transition_seconds: number;
+  body_transition_ms: number;
+  speaking_debounce_ms: number;
+  idle_interim_ms: number;
   speaking_transition: PersonaSpeakingTransitionSettings;
   packaged_animation_change_count: number;
   models: PersonaModelSettings[];
@@ -188,7 +190,9 @@ interface Window {
     setSpeakingTransition(
       transition: PersonaSpeakingTransitionSettings,
     ): Promise<PersonaSettingsSnapshot>;
-    setBodyTransitionSeconds(seconds: number): Promise<PersonaSettingsSnapshot>;
+    setBodyTransitionMs(milliseconds: number): Promise<PersonaSettingsSnapshot>;
+    setSpeakingDebounceMs(milliseconds: number): Promise<PersonaSettingsSnapshot>;
+    setIdleInterimMs(milliseconds: number): Promise<PersonaSettingsSnapshot>;
     enableDeveloperSettings(): Promise<PersonaSettingsSnapshot>;
     resetDeveloperSettings(): Promise<PersonaSettingsSnapshot>;
     setVoiceSource(
