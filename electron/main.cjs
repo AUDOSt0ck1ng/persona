@@ -483,15 +483,29 @@ function configureVroidHub(clientId, clientSecret) {
 // persona:settings-set-window-theme's existing sender checks below.
 // isEncryptionAvailable() alone is not a reliable secrecy guarantee on
 // Linux: without a running keyring (GNOME Secret Service or KWallet over
-// D-Bus), Electron's safeStorage still reports encryption as "available"
-// but silently selects the basic_text backend, which provides no real
-// protection. A packaged build must not tell the user their VRoid Hub
-// client secret and session tokens are OS-keychain-backed when they are
-// not, so this checks the actual selected backend rather than trusting
-// isEncryptionAvailable() by itself. The dev-only plaintext override above
-// intentionally forces basic_text for local convenience, so this check is
-// skipped there.
-function vroidHubSecureStorageAvailable() {
+// D-Bus), Electron's safeStorage can select the basic_text backend, which
+// provides no real protection. A packaged build must not tell the user their
+// VRoid Hub client secret and session tokens are OS-keychain-backed when they
+// are not, so this checks the actual selected backend rather than trusting
+// isEncryptionAvailable() by itself. Local development still opts into
+// Electron's plaintext backend for convenience. Packaged Linux builds can only
+// do the same when the gated Developer setting explicitly allows it.
+function vroidHubPlaintextStorageAllowed(snapshot = settingsStore?.getSnapshot()) {
+  return (
+    process.platform === "linux" &&
+    snapshot?.vroid_hub_allow_plaintext_storage === true
+  );
+}
+
+function syncVroidHubStorageBackend(snapshot = settingsStore?.getSnapshot()) {
+  if (process.platform !== "linux") return;
+  safeStorage.setUsePlainTextEncryption(
+    !app.isPackaged || vroidHubPlaintextStorageAllowed(snapshot),
+  );
+}
+
+function vroidHubSecureStorageAvailable(snapshot = settingsStore?.getSnapshot()) {
+  if (vroidHubPlaintextStorageAllowed(snapshot)) return true;
   if (!safeStorage.isEncryptionAvailable()) return false;
   if (!app.isPackaged) return true;
   return safeStorage.getSelectedStorageBackend?.() !== "basic_text";
@@ -521,6 +535,29 @@ function broadcastVroidHubStatus() {
     !settingsWindow.webContents.isLoading()
   ) {
     settingsWindow.webContents.send("persona:vroid-status-updated", vroidHubStatus());
+  }
+}
+
+function refreshVroidHubStoragePolicy(snapshot = settingsStore?.getSnapshot()) {
+  syncVroidHubStorageBackend(snapshot);
+  if (!vroidCredentialsFilePath) return;
+  if (!vroidHubSecureStorageAvailable(snapshot)) {
+    vroidHubAuth?.disconnect();
+    vroidHubAuth = null;
+    vroidHubClient = null;
+    publishSettings(settingsStore.clearActiveHubModel());
+    return;
+  }
+  const vroidCredentials = readVroidHubCredentials({
+    credentialsFilePath: vroidCredentialsFilePath,
+    decrypt: (buffer) =>
+      Buffer.from(safeStorage.decryptString(buffer), "utf8"),
+  });
+  if (vroidCredentials) {
+    configureVroidHub(
+      vroidCredentials.clientId,
+      vroidCredentials.clientSecret,
+    );
   }
 }
 
@@ -856,22 +893,12 @@ if (!app.requestSingleInstanceLock()) {
     // session tokens. The redirect URI is served by the local loopback
     // bridge below, not the persona:// deep link, so it works identically in
     // `npm run dev`/`demo` and packaged builds.
-    // Dev-only convenience: safeStorage (used to encrypt both the credentials
-    // and the VRoid Hub token file) needs a real OS keychain backend on
-    // Linux (KWallet or GNOME Secret Service over D-Bus). Machines running
-    // Persona from source without one — e.g. a minimal WSL2 install with no
-    // session D-Bus — would otherwise have the VRoid Hub feature silently
-    // disabled. Packaged builds never call this, so distributed Persona
-    // still requires real OS-backed encryption; this only loosens the
-    // guarantee for local development.
-    if (!app.isPackaged) {
-      safeStorage.setUsePlainTextEncryption(true);
-    }
+    syncVroidHubStorageBackend(initialSettingsSnapshot);
     vroidCredentialsFilePath = path.join(
       app.getPath("userData"),
       "vroid-hub-credentials.json",
     );
-    if (vroidHubSecureStorageAvailable()) {
+    if (vroidHubSecureStorageAvailable(initialSettingsSnapshot)) {
       const vroidCredentials = readVroidHubCredentials({
         credentialsFilePath: vroidCredentialsFilePath,
         decrypt: (buffer) =>
@@ -978,8 +1005,40 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.handle("persona:settings-enable-developer", () =>
       publishSettings(settingsStore.enableDeveloperSettings()),
     );
-    ipcMain.handle("persona:settings-reset-developer", () =>
-      publishSettings(settingsStore.resetDeveloperSettings()),
+    ipcMain.handle("persona:settings-reset-developer", () => {
+      const snapshot = publishSettings(settingsStore.resetDeveloperSettings());
+      refreshVroidHubStoragePolicy(snapshot);
+      broadcastVroidHubStatus();
+      return settingsStore.getSnapshot();
+    });
+    ipcMain.handle(
+      "persona:settings-set-vroid-plaintext-storage",
+      (_event, allowed) => {
+        const snapshot = publishSettings(
+          settingsStore.setVroidHubPlaintextStorageAllowed(allowed),
+        );
+        syncVroidHubStorageBackend(snapshot);
+        if (!vroidHubSecureStorageAvailable(snapshot)) {
+          vroidHubAuth?.disconnect();
+          vroidHubAuth = null;
+          vroidHubClient = null;
+          publishSettings(settingsStore.clearActiveHubModel());
+        } else if (vroidCredentialsFilePath) {
+          const vroidCredentials = readVroidHubCredentials({
+            credentialsFilePath: vroidCredentialsFilePath,
+            decrypt: (buffer) =>
+              Buffer.from(safeStorage.decryptString(buffer), "utf8"),
+          });
+          if (vroidCredentials) {
+            configureVroidHub(
+              vroidCredentials.clientId,
+              vroidCredentials.clientSecret,
+            );
+          }
+        }
+        broadcastVroidHubStatus();
+        return settingsStore.getSnapshot();
+      },
     );
     ipcMain.handle("persona:settings-set-voice-source", (_event, voiceSource) => {
       const snapshot = publishSettings(settingsStore.setVoiceSource(voiceSource));

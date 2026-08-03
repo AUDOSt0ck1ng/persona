@@ -438,6 +438,15 @@ test("validates custom metadata, files, duplicates, and appearance settings", (c
   assert.equal(store.getSnapshot().speaking_debounce_ms, 350);
   assert.equal(store.getSnapshot().idle_interim_ms, 350);
   assert.equal(store.getSnapshot().developer_settings_enabled, true);
+  assert.equal(
+    store.setVroidHubPlaintextStorageAllowed(true)
+      .vroid_hub_allow_plaintext_storage,
+    true,
+  );
+  assert.equal(
+    store.resetDeveloperSettings().vroid_hub_allow_plaintext_storage,
+    false,
+  );
 
   const invalidModel = path.join(root, "invalid.vrm");
   fs.writeFileSync(invalidModel, "not glTF");

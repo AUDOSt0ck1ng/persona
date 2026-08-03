@@ -107,6 +107,7 @@ interface PersonaSettingsSnapshot {
   character_size: number;
   avatar_window: PersonaAvatarWindowSize;
   developer_settings_enabled: boolean;
+  vroid_hub_allow_plaintext_storage: boolean;
   body_transition_ms: number;
   speaking_debounce_ms: number;
   idle_interim_ms: number;
@@ -251,6 +252,9 @@ interface Window {
     setIdleInterimMs(milliseconds: number): Promise<PersonaSettingsSnapshot>;
     enableDeveloperSettings(): Promise<PersonaSettingsSnapshot>;
     resetDeveloperSettings(): Promise<PersonaSettingsSnapshot>;
+    setVroidHubPlaintextStorageAllowed(
+      allowed: boolean,
+    ): Promise<PersonaSettingsSnapshot>;
     setVoiceSource(
       voiceSource: PersonaVoiceSourceSettings,
     ): Promise<PersonaSettingsSnapshot>;

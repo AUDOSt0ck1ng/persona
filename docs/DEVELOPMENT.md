@@ -151,7 +151,9 @@ They can also be changed from the gated Developer tab in the Settings window.
 The warning must be acknowledged once before its controls are available. Valid
 entry and exit durations range from `45` to `3600` ms. Their two-handle sliders
 select the complete random range; Reset developer settings restores the
-packaged ranges while leaving developer access enabled.
+packaged ranges while leaving developer access enabled. The same Developer tab
+also exposes a Linux-only VRoid Hub plaintext override for machines that do
+not have a secure credential store available during development.
 
 ## MCP contract
 
