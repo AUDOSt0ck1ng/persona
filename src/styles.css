@@ -1988,6 +1988,60 @@ button {
   line-height: 1.55;
 }
 
+.settings-disclosure {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg-card);
+}
+
+.settings-disclosure > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  list-style: none;
+  cursor: pointer;
+}
+
+.settings-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-disclosure > summary::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid var(--text-tertiary);
+  border-bottom: 1.5px solid var(--text-tertiary);
+  transform: rotate(-45deg);
+  transition: transform var(--dur) var(--ease);
+}
+
+.settings-disclosure[open] > summary::before {
+  transform: rotate(45deg);
+}
+
+.settings-disclosure > summary:hover {
+  color: var(--text-primary);
+}
+
+.settings-disclosure-body {
+  padding: 0 14px 14px;
+}
+
+.settings-disclosure-body > .desktop-note {
+  margin-top: 0;
+}
+
+.settings-disclosure-body > .mcp-copy-field {
+  margin-top: 10px;
+}
+
 .mcp-copy-field {
   display: flex;
   align-items: center;

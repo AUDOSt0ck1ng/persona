@@ -164,6 +164,7 @@ function errorMessage(error: unknown): string {
 
 export function SettingsPage() {
   const bridge = window.personaSettings;
+  const vroidHubBridge = window.personaVroidHub;
   const { chooseTheme, preference: themePreference } = useThemePreference();
   const [previewCollapsed, setPreviewCollapsed] = useState(false);
   const [settings, setSettings] =
@@ -211,6 +212,18 @@ export function SettingsPage() {
   const [confirmation, setConfirmation] =
     useState<ConfirmationRequest | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [vroidStatus, setVroidStatus] = useState<PersonaVroidHubStatus | null>(
+    null,
+  );
+  const [vroidCredentials, setVroidCredentials] =
+    useState<PersonaVroidHubCredentials | null>(null);
+  const [vroidClientIdInput, setVroidClientIdInput] = useState('');
+  const [vroidClientSecretInput, setVroidClientSecretInput] = useState('');
+  const [vroidCredentialsSaving, setVroidCredentialsSaving] = useState(false);
+  const [vroidCharacters, setVroidCharacters] = useState<
+    PersonaVroidHubCharacter[] | null
+  >(null);
+  const [vroidLoading, setVroidLoading] = useState(false);
   const confirmationDialogRef = useRef<HTMLDivElement>(null);
   const confirmationCancelRef = useRef<HTMLButtonElement>(null);
   const confirmationConfirmRef = useRef<HTMLButtonElement>(null);
@@ -237,6 +250,39 @@ export function SettingsPage() {
       .catch((error: unknown) => setNotice(errorMessage(error)));
     return bridge.subscribe(setSettings);
   }, [bridge]);
+
+  useEffect(() => {
+    if (!vroidHubBridge) return;
+    void vroidHubBridge
+      .getStatus()
+      .then(setVroidStatus)
+      .catch((error: unknown) => setNotice(errorMessage(error)));
+    void vroidHubBridge
+      .getCredentials()
+      .then((credentials) => {
+        setVroidCredentials(credentials);
+        setVroidClientIdInput(credentials.clientId ?? '');
+      })
+      .catch((error: unknown) => setNotice(errorMessage(error)));
+    return vroidHubBridge.subscribe(setVroidStatus);
+  }, [vroidHubBridge]);
+
+  const refreshVroidCharacters = useCallback(async () => {
+    if (!vroidHubBridge) return;
+    setVroidLoading(true);
+    try {
+      setVroidCharacters(await vroidHubBridge.listCharacters());
+    } catch (error) {
+      setNotice(errorMessage(error));
+    } finally {
+      setVroidLoading(false);
+    }
+  }, [vroidHubBridge]);
+
+  useEffect(() => {
+    if (vroidStatus?.connected) void refreshVroidCharacters();
+    else setVroidCharacters(null);
+  }, [vroidStatus?.connected, refreshVroidCharacters]);
 
   useEffect(() => {
     setVoiceMode(settings.voice_source.mode);
@@ -568,6 +614,93 @@ export function SettingsPage() {
         }
       },
     });
+  };
+
+  const saveVroidCredentials = async () => {
+    if (!vroidHubBridge) return;
+    const clientId = vroidClientIdInput.trim();
+    const clientSecret = vroidClientSecretInput.trim();
+    if (!clientId || !clientSecret) {
+      setNotice('Enter both a client ID and client secret.');
+      return;
+    }
+    setVroidCredentialsSaving(true);
+    setNotice(null);
+    try {
+      setVroidStatus(await vroidHubBridge.setCredentials(clientId, clientSecret));
+      setVroidCredentials(await vroidHubBridge.getCredentials());
+      setVroidClientSecretInput('');
+      setVroidCharacters(null);
+      setNotice('VRoid Hub app credentials saved.');
+    } catch (error) {
+      setNotice(errorMessage(error));
+    } finally {
+      setVroidCredentialsSaving(false);
+    }
+  };
+
+  const clearVroidCredentials = () => {
+    if (!vroidHubBridge) return;
+    openConfirmation({
+      confirmLabel: 'Remove',
+      title: 'Remove VRoid Hub app credentials?',
+      detail:
+        'Persona forgets this OAuth app and disconnects your VRoid Hub sign-in. A character currently in use from Hub is removed.',
+      onConfirm: async () => {
+        try {
+          setVroidStatus(await vroidHubBridge.clearCredentials());
+          setVroidCredentials({ clientId: null, hasClientSecret: false });
+          setVroidClientIdInput('');
+          setVroidClientSecretInput('');
+          setVroidCharacters(null);
+        } catch (error) {
+          setNotice(errorMessage(error));
+        }
+      },
+    });
+  };
+
+  const connectVroidHub = async () => {
+    if (!vroidHubBridge) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      setVroidStatus(await vroidHubBridge.connect());
+      setNotice('Continue signing in to VRoid Hub in your browser.');
+    } catch (error) {
+      setNotice(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disconnectVroidHub = () => {
+    if (!vroidHubBridge) return;
+    openConfirmation({
+      confirmLabel: 'Disconnect',
+      title: 'Disconnect VRoid Hub?',
+      detail:
+        'Persona forgets your VRoid Hub sign-in. A character currently in use from Hub is removed until you reconnect and choose it again.',
+      onConfirm: async () => {
+        try {
+          setVroidStatus(await vroidHubBridge.disconnect());
+          setVroidCharacters(null);
+        } catch (error) {
+          setNotice(errorMessage(error));
+        }
+      },
+    });
+  };
+
+  const selectVroidCharacter = async (character: PersonaVroidHubCharacter) => {
+    if (!vroidHubBridge) return;
+    const snapshot = await run(
+      () => vroidHubBridge.selectCharacter(character.id),
+      `${character.name} is ready to use.`,
+    );
+    if (!snapshot) return;
+    const hubModel = snapshot.models.find((model) => model.origin === 'hub');
+    if (hubModel) setSelectedModelId(hubModel.id);
   };
 
   const beginEditingAnimation = (animation: PersonaAnimationSettings) => {
@@ -1040,7 +1173,9 @@ export function SettingsPage() {
                             <small>
                               {model.origin === 'packaged'
                                 ? 'Packaged model'
-                                : 'User model'}
+                                : model.origin === 'hub'
+                                  ? 'From VRoid Hub'
+                                  : 'User model'}
                             </small>
                           </span>
                         </button>
@@ -1110,6 +1245,190 @@ export function SettingsPage() {
                   <p className="desktop-note">
                     File import is available in the Persona desktop app.
                   </p>
+                )}
+              </section>
+
+              <section className="settings-panel">
+                <div className="panel-heading">
+                  <div>
+                    <h2>VRoid Hub</h2>
+                    <p>
+                      Use a character that&rsquo;s only available through
+                      your VRoid Hub account, without downloading it
+                      yourself.
+                    </p>
+                  </div>
+                  {vroidStatus?.connected && (
+                    <span className="default-badge">Connected</span>
+                  )}
+                </div>
+                {!vroidHubBridge && (
+                  <p className="desktop-note">
+                    VRoid Hub sign-in is available in the Persona desktop
+                    app.
+                  </p>
+                )}
+                {vroidHubBridge && (
+                  <details
+                    className="settings-disclosure"
+                    open={vroidStatus != null && !vroidStatus.configured}
+                  >
+                    <summary>
+                      Advanced: connect your own VRoid Hub OAuth app
+                    </summary>
+                    <div className="settings-disclosure-body">
+                      <p className="desktop-note">
+                        Register your own OAuth app at{' '}
+                        <code>hub.vroid.com/oauth/applications</code>, set
+                        its redirect URI to the value below, then paste the
+                        app&rsquo;s client ID and secret here.
+                      </p>
+                      <div className="mcp-copy-field">
+                        <div>
+                          <span>Redirect URI to register</span>
+                          <code>{vroidStatus?.redirect_uri ?? '—'}</code>
+                        </div>
+                        <button
+                          className="secondary-button"
+                          disabled={!vroidStatus}
+                          onClick={() =>
+                            vroidStatus &&
+                            void copyText(
+                              vroidStatus.redirect_uri,
+                              'Redirect URI',
+                            )
+                          }
+                          type="button"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <div className="form-stack">
+                        <label>
+                          Client ID
+                          <input
+                            onChange={(event) =>
+                              setVroidClientIdInput(event.target.value)
+                            }
+                            placeholder="OAuth app client ID"
+                            value={vroidClientIdInput}
+                          />
+                        </label>
+                        <label>
+                          Client secret
+                          <input
+                            onChange={(event) =>
+                              setVroidClientSecretInput(event.target.value)
+                            }
+                            placeholder={
+                              vroidCredentials?.hasClientSecret
+                                ? 'Saved — enter a new value to replace it'
+                                : 'OAuth app client secret'
+                            }
+                            type="password"
+                            value={vroidClientSecretInput}
+                          />
+                        </label>
+                      </div>
+                      <div className="form-actions">
+                        <button
+                          className="primary-button"
+                          disabled={
+                            vroidCredentialsSaving ||
+                            !vroidClientIdInput.trim() ||
+                            !vroidClientSecretInput.trim()
+                          }
+                          onClick={() => void saveVroidCredentials()}
+                          type="button"
+                        >
+                          {vroidCredentialsSaving
+                            ? 'Saving…'
+                            : 'Save credentials'}
+                        </button>
+                        {vroidStatus?.configured && (
+                          <button
+                            className="secondary-button danger-text-button"
+                            disabled={busy}
+                            onClick={clearVroidCredentials}
+                            type="button"
+                          >
+                            Remove credentials
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </details>
+                )}
+                {vroidHubBridge && vroidStatus?.configured && !vroidStatus.connected && (
+                  <button
+                    className="primary-button"
+                    disabled={busy}
+                    onClick={() => void connectVroidHub()}
+                    type="button"
+                  >
+                    Connect VRoid Hub account
+                  </button>
+                )}
+                {vroidHubBridge && vroidStatus?.connected && (
+                  <>
+                    <div className="asset-grid">
+                      {vroidLoading && <p>Loading your characters…</p>}
+                      {!vroidLoading && vroidCharacters?.length === 0 && (
+                        <div className="empty-library">
+                          <strong>No characters available yet</strong>
+                          <p>
+                            Mark a character available to other users on
+                            VRoid Hub, or heart one that already is, then
+                            refresh.
+                          </p>
+                        </div>
+                      )}
+                      {vroidCharacters?.map((character) => (
+                        <article className="asset-card" key={character.id}>
+                          <span className="asset-card-main">
+                            <span className="asset-icon">VRM</span>
+                            <span>
+                              <strong>{character.name}</strong>
+                              <small>
+                                {character.is_downloadable
+                                  ? 'Downloadable on Hub'
+                                  : 'Hub only'}
+                              </small>
+                            </span>
+                          </span>
+                          <div className="asset-card-footer">
+                            <button
+                              disabled={busy}
+                              onClick={() =>
+                                void selectVroidCharacter(character)
+                              }
+                              type="button"
+                            >
+                              Use this character
+                            </button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                    <div className="form-actions">
+                      <button
+                        className="secondary-button"
+                        disabled={busy || vroidLoading}
+                        onClick={() => void refreshVroidCharacters()}
+                        type="button"
+                      >
+                        Refresh list
+                      </button>
+                      <button
+                        className="secondary-button danger-text-button"
+                        disabled={busy}
+                        onClick={disconnectVroidHub}
+                        type="button"
+                      >
+                        Disconnect
+                      </button>
+                    </div>
+                  </>
                 )}
               </section>
             </>
