@@ -62,24 +62,20 @@ test("lists the account's own models and eligible hearted models, filtering inel
       }
       if (request.url.startsWith("/api/hearts")) {
         heartsUrl = request.url;
+        // /api/hearts' data entries are the character models themselves,
+        // not a heart record wrapping one under a character_model key.
         return json(response, 200, {
           data: [
-            {
-              id: "heart-1",
-              character_model: characterModel({
-                id: "hearted-allowed",
-                name: "Hearted, allowed",
-                is_other_users_available: true,
-              }),
-            },
-            {
-              id: "heart-2",
-              character_model: characterModel({
-                id: "hearted-blocked",
-                name: "Hearted, blocked",
-                is_other_users_available: false,
-              }),
-            },
+            characterModel({
+              id: "hearted-allowed",
+              name: "Hearted, allowed",
+              is_other_users_available: true,
+            }),
+            characterModel({
+              id: "hearted-blocked",
+              name: "Hearted, blocked",
+              is_other_users_available: false,
+            }),
           ],
         });
       }

@@ -86,9 +86,9 @@ function createVroidHubClient({
     // Only the connected account unconditionally owns its own models; a
     // hearted model created by someone else must be explicitly marked
     // available to other users before Persona is allowed to use it, per
-    // VRoid Hub's third-party integration rules.
+    // VRoid Hub's third-party integration rules. /api/hearts' data entries
+    // are the character models themselves, not a heart record wrapping one.
     const heartedModels = (Array.isArray(hearts?.data) ? hearts.data : [])
-      .map((heart) => heart.character_model)
       .filter((model) => model?.is_other_users_available === true);
 
     const ownIds = new Set(
