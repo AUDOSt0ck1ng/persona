@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from 'react';
 import { Scene } from './Scene';
@@ -13,6 +14,10 @@ import {
 } from '../animation-catalog';
 import {
   loadPackagedSettingsFallback,
+  MAX_AVATAR_WINDOW_HEIGHT,
+  MAX_AVATAR_WINDOW_WIDTH,
+  MIN_AVATAR_WINDOW_HEIGHT,
+  MIN_AVATAR_WINDOW_WIDTH,
   SETTINGS_FALLBACK,
   resolveLightingSettings,
 } from '../settings-defaults';
@@ -188,6 +193,84 @@ function Icon({ children }: { children: ReactNode }) {
   );
 }
 
+function singleRangeStyle(
+  value: number,
+  minimum: number,
+  maximum: number,
+): CSSProperties {
+  const progress =
+    ((Math.min(maximum, Math.max(minimum, value)) - minimum) /
+      (maximum - minimum)) *
+    100;
+  return {
+    '--range-progress': `${progress}%`,
+  } as CSSProperties;
+}
+
+function MillisecondRangeSlider({
+  disabled,
+  label,
+  maximum = 3600,
+  minimum = 45,
+  onCommit,
+  onPreview,
+  step = 5,
+  value,
+}: {
+  disabled: boolean;
+  label: string;
+  maximum?: number;
+  minimum?: number;
+  onCommit: (range: readonly [number, number]) => void;
+  onPreview: (range: readonly [number, number]) => void;
+  step?: number;
+  value: readonly [number, number];
+}) {
+  const rangeFor = (index: 0 | 1, nextValue: number) => {
+    return index === 0
+      ? [Math.min(nextValue, value[1]), value[1]] as const
+      : [value[0], Math.max(nextValue, value[0])] as const;
+  };
+  const percentage = (point: number) =>
+    ((point - minimum) / (maximum - minimum)) * 100;
+  const style = {
+    '--range-start': `${percentage(value[0])}%`,
+    '--range-end': `${percentage(value[1])}%`,
+  } as CSSProperties;
+
+  return (
+    <div className="dual-range-slider" style={style}>
+      <div className="dual-range-track" aria-hidden="true">
+        <i />
+      </div>
+      {([0, 1] as const).map((index) => (
+        <input
+          aria-label={`${label} ${index === 0 ? 'minimum' : 'maximum'}`}
+          className={`dual-range-input dual-range-input-${index === 0 ? 'minimum' : 'maximum'}`}
+          disabled={disabled}
+          key={index}
+          max={maximum}
+          min={minimum}
+          onChange={(event) =>
+            onPreview(rangeFor(index, Number(event.currentTarget.value)))
+          }
+          onKeyUp={(event) => {
+            if (event.key.startsWith('Arrow')) {
+              onCommit(rangeFor(index, Number(event.currentTarget.value)));
+            }
+          }}
+          onPointerUp={(event) =>
+            onCommit(rangeFor(index, Number(event.currentTarget.value)))
+          }
+          step={step}
+          type="range"
+          value={value[index]}
+        />
+      ))}
+    </div>
+  );
+}
+
 const SECTION_ICONS: Record<SettingsSection, ReactNode> = {
   models: (
     <Icon>
@@ -275,6 +358,12 @@ export function SettingsPage() {
   const [section, setSection] = useState<SettingsSection>('models');
   const [selectedModelId, setSelectedModelId] = useState(
     SETTINGS_FALLBACK.default_model_id,
+  );
+  const [avatarWidthInput, setAvatarWidthInput] = useState(
+    String(SETTINGS_FALLBACK.avatar_window.width),
+  );
+  const [avatarHeightInput, setAvatarHeightInput] = useState(
+    String(SETTINGS_FALLBACK.avatar_window.height),
   );
   const [previewAnimation, setPreviewAnimation] =
     useState<PersonaAnimationSettings | null>(null);
@@ -945,56 +1034,103 @@ export function SettingsPage() {
     );
   };
 
+  useEffect(() => {
+    setAvatarWidthInput(String(settings.avatar_window.width));
+    setAvatarHeightInput(String(settings.avatar_window.height));
+  }, [settings.avatar_window]);
+
+  const avatarWidth = Math.round(Number(avatarWidthInput));
+  const avatarHeight = Math.round(Number(avatarHeightInput));
+  const avatarWindowSizeValid =
+    Number.isFinite(avatarWidth) &&
+    avatarWidth >= MIN_AVATAR_WINDOW_WIDTH &&
+    avatarWidth <= MAX_AVATAR_WINDOW_WIDTH &&
+    Number.isFinite(avatarHeight) &&
+    avatarHeight >= MIN_AVATAR_WINDOW_HEIGHT &&
+    avatarHeight <= MAX_AVATAR_WINDOW_HEIGHT;
+  const avatarWindowSizeChanged =
+    avatarWidth !== settings.avatar_window.width ||
+    avatarHeight !== settings.avatar_window.height;
+
+  const saveAvatarWindowSize = async () => {
+    if (!bridge || !avatarWindowSizeValid) return;
+    await run(
+      () => bridge.setAvatarWindowSize(avatarWidth, avatarHeight),
+      `Avatar window resized to ${avatarWidth}×${avatarHeight}.`,
+    );
+  };
+
   const previewSpeakingTransition = (
     field: keyof PersonaSpeakingTransitionSettings,
-    value: number,
+    range: readonly [number, number],
   ) => {
-    const fixedRange = [value, value] as const;
     setSettings((current) => ({
       ...current,
       speaking_transition: {
         ...current.speaking_transition,
-        [field]: fixedRange,
+        [field]: range,
       },
     }));
   };
 
   const saveSpeakingTransition = async (
     field: keyof PersonaSpeakingTransitionSettings,
-    value: number,
+    range: readonly [number, number],
   ) => {
     if (!bridge) return;
-    const fixedRange = [value, value] as const;
     await persistAppearance(
       () =>
         bridge.setSpeakingTransition({
           ...settings.speaking_transition,
-          [field]: fixedRange,
+          [field]: range,
         }),
       'Speaking transition updated.',
     );
   };
 
-  const previewBodyTransitionSeconds = (value: number) => {
+  const previewBodyTransitionMs = (value: number) => {
     setSettings((current) => ({
       ...current,
-      body_transition_seconds: value,
+      body_transition_ms: value,
     }));
   };
 
-  const saveBodyTransitionSeconds = async (value: number) => {
+  const saveBodyTransitionMs = async (value: number) => {
     if (!bridge) return;
     await persistAppearance(
-      () => bridge.setBodyTransitionSeconds(value),
+      () => bridge.setBodyTransitionMs(value),
       'Body transition duration updated.',
     );
   };
 
-  const speakingTransitionSliderValue = (
-    field: keyof PersonaSpeakingTransitionSettings,
-  ) => {
-    const [minimum, maximum] = settings.speaking_transition[field];
-    return Math.round(((minimum + maximum) / 2) * 100) / 100;
+  const previewSpeakingDebounceMs = (value: number) => {
+    setSettings((current) => ({
+      ...current,
+      speaking_debounce_ms: value,
+    }));
+  };
+
+  const saveSpeakingDebounceMs = async (value: number) => {
+    if (!bridge) return;
+    await persistAppearance(
+      () => bridge.setSpeakingDebounceMs(value),
+      'Speaking debounce updated.',
+    );
+  };
+
+  const previewIdleInterimMs = (value: number) => {
+    setSettings((current) => ({
+      ...current,
+      idle_interim_ms: value,
+    }));
+  };
+
+  const saveIdleInterimMs = async (value: number) => {
+    if (!bridge) return;
+    await persistAppearance(
+      () => bridge.setIdleInterimMs(value),
+      'Idle interim updated.',
+    );
   };
 
   const requestDeveloperSettingsAccess = () => {
@@ -1151,12 +1287,15 @@ export function SettingsPage() {
           ? 'External events'
           : 'Automatic detection';
   const developerSettingsModified =
-    settings.body_transition_seconds !==
-      SETTINGS_FALLBACK.body_transition_seconds ||
-    (['entry_factor', 'exit_factor'] as const).some((field) =>
+    settings.body_transition_ms !== SETTINGS_FALLBACK.body_transition_ms ||
+    settings.speaking_debounce_ms !==
+      SETTINGS_FALLBACK.speaking_debounce_ms ||
+    settings.idle_interim_ms !== SETTINGS_FALLBACK.idle_interim_ms ||
+    (['entry_ms', 'exit_ms'] as const).some((field) =>
       settings.speaking_transition[field].some(
-        (factor, index) =>
-          factor !== SETTINGS_FALLBACK.speaking_transition[field][index],
+        (milliseconds, index) =>
+          milliseconds !==
+          SETTINGS_FALLBACK.speaking_transition[field][index],
       ),
     );
 
@@ -1951,7 +2090,7 @@ export function SettingsPage() {
                 </div>
                 <input
                   aria-label="Default character size"
-                  className="size-slider"
+                  className="single-range-slider size-slider"
                   max="1.6"
                   min="0.7"
                   onBlur={(event) =>
@@ -1971,6 +2110,7 @@ export function SettingsPage() {
                     void saveCharacterSize(Number(event.currentTarget.value))
                   }
                   step="0.05"
+                  style={singleRangeStyle(settings.character_size, 0.7, 1.6)}
                   type="range"
                   value={settings.character_size}
                 />
@@ -1979,6 +2119,72 @@ export function SettingsPage() {
                   <span>Default</span>
                   <span>160%</span>
                 </div>
+              </section>
+
+              <section className="settings-panel appearance-panel">
+                <div className="panel-heading">
+                  <div>
+                    <h2>Avatar window size</h2>
+                    <p>
+                      Set the pixel width and height of the Avatar window.
+                    </p>
+                  </div>
+                </div>
+                <div className="avatar-window-size-row">
+                  <label>
+                    Width
+                    <input
+                      aria-label="Avatar window width"
+                      max={MAX_AVATAR_WINDOW_WIDTH}
+                      min={MIN_AVATAR_WINDOW_WIDTH}
+                      onChange={(event) =>
+                        setAvatarWidthInput(event.currentTarget.value)
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') void saveAvatarWindowSize();
+                      }}
+                      step="1"
+                      type="number"
+                      value={avatarWidthInput}
+                    />
+                  </label>
+                  <label>
+                    Height
+                    <input
+                      aria-label="Avatar window height"
+                      max={MAX_AVATAR_WINDOW_HEIGHT}
+                      min={MIN_AVATAR_WINDOW_HEIGHT}
+                      onChange={(event) =>
+                        setAvatarHeightInput(event.currentTarget.value)
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') void saveAvatarWindowSize();
+                      }}
+                      step="1"
+                      type="number"
+                      value={avatarHeightInput}
+                    />
+                  </label>
+                </div>
+                <button
+                  className="primary-button"
+                  disabled={
+                    busy ||
+                    !bridge ||
+                    !avatarWindowSizeValid ||
+                    !avatarWindowSizeChanged
+                  }
+                  onClick={() => void saveAvatarWindowSize()}
+                  type="button"
+                >
+                  Apply
+                </button>
+                {!bridge && (
+                  <p className="desktop-note">
+                    Resizing the avatar window is available in the Persona
+                    desktop app.
+                  </p>
+                )}
               </section>
 
               <section className="settings-panel lighting-panel">
@@ -2038,6 +2244,7 @@ export function SettingsPage() {
                   <label>
                     <span>Environment intensity</span>
                     <input
+                      className="single-range-slider"
                       disabled={busy || !bridge || !selectedModel}
                       max="2"
                       min="0"
@@ -2060,6 +2267,11 @@ export function SettingsPage() {
                         )
                       }
                       step="0.01"
+                      style={singleRangeStyle(
+                        previewLighting.environment_intensity,
+                        0,
+                        2,
+                      )}
                       type="range"
                       value={previewLighting.environment_intensity}
                     />
@@ -2099,6 +2311,7 @@ export function SettingsPage() {
                   <label>
                     <span>Key light intensity</span>
                     <input
+                      className="single-range-slider"
                       disabled={busy || !bridge || !selectedModel}
                       max="4"
                       min="0"
@@ -2121,6 +2334,11 @@ export function SettingsPage() {
                         )
                       }
                       step="0.01"
+                      style={singleRangeStyle(
+                        previewLighting.key_light_intensity,
+                        0,
+                        4,
+                      )}
                       type="range"
                       value={previewLighting.key_light_intensity}
                     />
@@ -2160,6 +2378,7 @@ export function SettingsPage() {
                   <label>
                     <span>Ambient / fill intensity</span>
                     <input
+                      className="single-range-slider"
                       disabled={busy || !bridge || !selectedModel}
                       max="4"
                       min="0"
@@ -2182,6 +2401,11 @@ export function SettingsPage() {
                         )
                       }
                       step="0.01"
+                      style={singleRangeStyle(
+                        previewLighting.ambient_intensity,
+                        0,
+                        4,
+                      )}
                       type="range"
                       value={previewLighting.ambient_intensity}
                     />
@@ -2221,6 +2445,7 @@ export function SettingsPage() {
                   <label>
                     <span>Exposure</span>
                     <input
+                      className="single-range-slider"
                       disabled={busy || !bridge || !selectedModel}
                       max="3"
                       min="0.1"
@@ -2243,6 +2468,11 @@ export function SettingsPage() {
                         )
                       }
                       step="0.01"
+                      style={singleRangeStyle(
+                        previewLighting.exposure,
+                        0.1,
+                        3,
+                      )}
                       type="range"
                       value={previewLighting.exposure}
                     />
@@ -2326,20 +2556,19 @@ export function SettingsPage() {
                   <section className="settings-panel lighting-panel">
                     <div className="panel-heading">
                       <div>
-                        <h2>Speaking transitions</h2>
+                        <h2>Animation scheduler</h2>
                         <p>
-                          Tune how body motion blends between conversational
-                          chunks. Packaged defaults vary each transition between
-                          1.5× and 1.8×. Moving a slider fixes that value until
-                          developer settings are reset.
+                          Tune speaking pause handling and the transition
+                          profile used for speaking chunks and agent-triggered
+                          animations. Changes apply live.
                         </p>
                       </div>
                     </div>
 
                     {(
                       [
-                        ['entry_factor', 'Entry factor'],
-                        ['exit_factor', 'Exit factor'],
+                        ['entry_ms', 'Chunk / action entry transition'],
+                        ['exit_ms', 'Chunk / action exit transition'],
                       ] as const
                     ).map(([field, label]) => (
                       <div className="lighting-row" key={field}>
@@ -2349,42 +2578,25 @@ export function SettingsPage() {
                             <small className="transition-range-state">
                               {settings.speaking_transition[field][0] ===
                               settings.speaking_transition[field][1]
-                                ? `${settings.speaking_transition[field][0]}× fixed`
-                                : `${settings.speaking_transition[field][0]}–${settings.speaking_transition[field][1]}× random`}
+                                ? `${settings.speaking_transition[field][0]}ms fixed`
+                                : `${settings.speaking_transition[field][0]}–${settings.speaking_transition[field][1]}ms random`}
                             </small>
                           </span>
-                          <input
+                          <MillisecondRangeSlider
                             disabled={busy || !bridge}
-                            max="8"
-                            min="0.1"
-                            onChange={(event) =>
-                              previewSpeakingTransition(
-                                field,
-                                Number(event.currentTarget.value),
-                              )
+                            label={label}
+                            onCommit={(range) =>
+                              void saveSpeakingTransition(field, range)
                             }
-                            onKeyUp={(event) => {
-                              if (event.key.startsWith('Arrow')) {
-                                void saveSpeakingTransition(
-                                  field,
-                                  Number(event.currentTarget.value),
-                                );
-                              }
-                            }}
-                            onPointerUp={(event) =>
-                              void saveSpeakingTransition(
-                                field,
-                                Number(event.currentTarget.value),
-                              )
+                            onPreview={(range) =>
+                              previewSpeakingTransition(field, range)
                             }
-                            step="0.1"
-                            type="range"
-                            value={speakingTransitionSliderValue(field)}
+                            value={settings.speaking_transition[field]}
                           />
                           <div className="slider-labels">
-                            <span>0.1× · Fast</span>
-                            <span>1×</span>
-                            <span>8× · Slow</span>
+                            <span>45ms · Fast</span>
+                            <span>1800ms</span>
+                            <span>3600ms · Slow</span>
                           </div>
                         </label>
                       </div>
@@ -2393,40 +2605,140 @@ export function SettingsPage() {
                     <div className="lighting-row">
                       <label>
                         <span>
-                          Body transition duration
+                          Speaking debounce
                           <small className="transition-range-state">
-                            {settings.body_transition_seconds.toFixed(2)}s
+                            {settings.speaking_debounce_ms}ms
                           </small>
                         </span>
                         <input
+                          className="single-range-slider"
                           disabled={busy || !bridge}
-                          max="3"
-                          min="0.05"
+                          max="3000"
+                          min="0"
                           onChange={(event) =>
-                            previewBodyTransitionSeconds(
+                            previewSpeakingDebounceMs(
                               Number(event.currentTarget.value),
                             )
                           }
                           onKeyUp={(event) => {
                             if (event.key.startsWith('Arrow')) {
-                              void saveBodyTransitionSeconds(
+                              void saveSpeakingDebounceMs(
                                 Number(event.currentTarget.value),
                               );
                             }
                           }}
                           onPointerUp={(event) =>
-                            void saveBodyTransitionSeconds(
+                            void saveSpeakingDebounceMs(
                               Number(event.currentTarget.value),
                             )
                           }
-                          step="0.05"
+                          step="50"
+                          style={singleRangeStyle(
+                            settings.speaking_debounce_ms,
+                            0,
+                            3000,
+                          )}
                           type="range"
-                          value={settings.body_transition_seconds}
+                          value={settings.speaking_debounce_ms}
                         />
                         <div className="slider-labels">
-                          <span>0.05s · Fast</span>
-                          <span>0.5s</span>
-                          <span>3s · Slow</span>
+                          <span>0ms</span>
+                          <span>350ms</span>
+                          <span>3000ms</span>
+                        </div>
+                      </label>
+                    </div>
+
+                    <div className="lighting-row">
+                      <label>
+                        <span>
+                          Idle interim
+                          <small className="transition-range-state">
+                            {settings.idle_interim_ms}ms
+                          </small>
+                        </span>
+                        <input
+                          className="single-range-slider"
+                          disabled={busy || !bridge}
+                          max="3000"
+                          min="0"
+                          onChange={(event) =>
+                            previewIdleInterimMs(
+                              Number(event.currentTarget.value),
+                            )
+                          }
+                          onKeyUp={(event) => {
+                            if (event.key.startsWith('Arrow')) {
+                              void saveIdleInterimMs(
+                                Number(event.currentTarget.value),
+                              );
+                            }
+                          }}
+                          onPointerUp={(event) =>
+                            void saveIdleInterimMs(
+                              Number(event.currentTarget.value),
+                            )
+                          }
+                          step="50"
+                          style={singleRangeStyle(
+                            settings.idle_interim_ms,
+                            0,
+                            3000,
+                          )}
+                          type="range"
+                          value={settings.idle_interim_ms}
+                        />
+                        <div className="slider-labels">
+                          <span>0ms</span>
+                          <span>350ms</span>
+                          <span>3000ms</span>
+                        </div>
+                      </label>
+                    </div>
+
+                    <div className="lighting-row">
+                      <label>
+                        <span>
+                          Body transition duration
+                          <small className="transition-range-state">
+                            {settings.body_transition_ms}ms
+                          </small>
+                        </span>
+                        <input
+                          className="single-range-slider"
+                          disabled={busy || !bridge}
+                          max="3000"
+                          min="50"
+                          onChange={(event) =>
+                            previewBodyTransitionMs(
+                              Number(event.currentTarget.value),
+                            )
+                          }
+                          onKeyUp={(event) => {
+                            if (event.key.startsWith('Arrow')) {
+                              void saveBodyTransitionMs(
+                                Number(event.currentTarget.value),
+                              );
+                            }
+                          }}
+                          onPointerUp={(event) =>
+                            void saveBodyTransitionMs(
+                              Number(event.currentTarget.value),
+                            )
+                          }
+                          step="50"
+                          style={singleRangeStyle(
+                            settings.body_transition_ms,
+                            50,
+                            3000,
+                          )}
+                          type="range"
+                          value={settings.body_transition_ms}
+                        />
+                        <div className="slider-labels">
+                          <span>50ms · Fast</span>
+                          <span>700ms</span>
+                          <span>3000ms · Slow</span>
                         </div>
                       </label>
                     </div>
@@ -2986,7 +3298,9 @@ export function SettingsPage() {
                   animation={previewType}
                   animationRequest={previewRequest}
                   animationUrls={previewAnimationUrls}
+                  fallbackAnimationUrls={idleAnimationUrls}
                   audioLevel={0}
+                  bodySpeaking={previewType === 'TALK'}
                   characterSize={settings.character_size}
                   lighting={previewLighting}
                   enablePan={false}
@@ -2998,9 +3312,10 @@ export function SettingsPage() {
                     setPreviewClipId(null);
                   }}
                   playback={previewClip ? 'once' : 'loop'}
-                  speakingMotionActive={previewType === 'TALK'}
                   speaking={previewType === 'TALK'}
-                  bodyTransitionSeconds={settings.body_transition_seconds}
+                  bodyTransitionMs={settings.body_transition_ms}
+                  speakingDebounceMs={settings.speaking_debounce_ms}
+                  idleInterimMs={settings.idle_interim_ms}
                   speakingTransition={settings.speaking_transition}
                 />
               )}
