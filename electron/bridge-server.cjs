@@ -8,6 +8,20 @@ const MAX_BODY_BYTES = 64 * 1024;
 const TRUSTED_ORIGIN =
   /^(?:https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?|codex-app:\/\/[A-Za-z0-9._~-]*)$/i;
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+const OAUTH_CALLBACK_PATH = "/vroid-oauth-callback";
+
+function oauthCallbackPage(success) {
+  const title = success ? "Persona is connected" : "Sign-in failed";
+  const message = success
+    ? "You can close this tab and return to Persona."
+    : "Something went wrong connecting your VRoid Hub account. Close this tab and try again from Persona's Settings.";
+  return (
+    "<!doctype html><html><head><meta charset=\"utf-8\">" +
+    `<title>${title}</title></head>` +
+    '<body style="font-family: sans-serif; text-align: center; padding: 4rem 1rem;">' +
+    `<h1>${title}</h1><p>${message}</p></body></html>`
+  );
+}
 
 function isVoiceState(value) {
   return (
@@ -108,6 +122,7 @@ function createBridgeServer({
   port = DEFAULT_PORT,
   onEvent,
   mcpHandler = null,
+  onOauthCallback = null,
 }) {
   let lastStateEvent = null;
   const server = http.createServer((request, response) => {
@@ -121,6 +136,34 @@ function createBridgeServer({
     if (request.method === "GET" && request.url === "/health") {
       response.writeHead(200, { "content-type": "application/json" });
       response.end(JSON.stringify({ ok: true, lastState: lastStateEvent?.state ?? null }));
+      return;
+    }
+
+    if (
+      request.method === "GET" &&
+      new URL(request.url, "http://localhost").pathname === OAUTH_CALLBACK_PATH
+    ) {
+      if (onOauthCallback == null) {
+        response.writeHead(404);
+        response.end();
+        return;
+      }
+      const params = new URL(request.url, "http://localhost").searchParams;
+      void Promise.resolve(
+        onOauthCallback({
+          code: params.get("code"),
+          state: params.get("state"),
+          error: params.get("error"),
+        }),
+      )
+        .then(() => {
+          response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+          response.end(oauthCallbackPage(true));
+        })
+        .catch(() => {
+          response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+          response.end(oauthCallbackPage(false));
+        });
       return;
     }
 
@@ -223,6 +266,7 @@ function createBridgeServer({
 
 module.exports = {
   DEFAULT_PORT,
+  OAUTH_CALLBACK_PATH,
   createBridgeServer,
   hostAllowed,
   isVoiceState,

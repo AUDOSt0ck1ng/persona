@@ -46,7 +46,7 @@ type PersonaAnimationType =
 interface PersonaModelSettings {
   id: string;
   model_name: string;
-  origin: 'packaged' | 'user';
+  origin: 'packaged' | 'user' | 'hub';
   removable: boolean;
   asset_url: string;
 }
@@ -136,6 +136,24 @@ interface CustomAnimationMetadata {
   animation_trigger_scenario: string;
 }
 
+interface PersonaVroidHubStatus {
+  configured: boolean;
+  connected: boolean;
+  redirect_uri: string;
+}
+
+interface PersonaVroidHubCredentials {
+  clientId: string | null;
+  hasClientSecret: boolean;
+}
+
+interface PersonaVroidHubCharacter {
+  id: string;
+  name: string;
+  is_downloadable: boolean;
+  portrait_url: string | null;
+}
+
 type AvatarBridgeEvent =
   | { type: 'state'; state: VoiceState }
   | { type: 'audio-level'; level: number; bands?: Record<string, number> }
@@ -207,5 +225,24 @@ interface Window {
       listener: (snapshot: PersonaSettingsSnapshot) => void,
     ): () => void;
     subscribeNotice(listener: (message: string) => void): () => void;
+  };
+  personaVroidHub?: {
+    getStatus(): Promise<PersonaVroidHubStatus>;
+    getCredentials(): Promise<PersonaVroidHubCredentials>;
+    setCredentials(
+      clientId: string,
+      clientSecret: string,
+    ): Promise<PersonaVroidHubStatus>;
+    clearCredentials(): Promise<PersonaVroidHubStatus>;
+    connect(): Promise<PersonaVroidHubStatus>;
+    disconnect(): Promise<PersonaVroidHubStatus>;
+    listCharacters(): Promise<PersonaVroidHubCharacter[]>;
+    selectCharacter(
+      characterId: string,
+      characterName: string,
+    ): Promise<PersonaSettingsSnapshot>;
+    subscribe(
+      listener: (status: PersonaVroidHubStatus) => void,
+    ): () => void;
   };
 }
