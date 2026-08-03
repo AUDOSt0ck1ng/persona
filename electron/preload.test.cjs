@@ -56,6 +56,7 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
   assert.deepEqual([...exposed.keys()], ["personaBridge", "personaSettings"]);
   await bridge.getSnapshot();
   bridge.hide();
+  bridge.moveBy(12, -4);
   await settings.get();
   await settings.importModel({ model_name: "Studio Assistant" });
   await settings.createAnimation({
@@ -75,6 +76,7 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
   await settings.deleteModel("model-id");
   await settings.setDefaultModel("model-id");
   await settings.setCharacterSize(1.2);
+  await settings.setAvatarWindowSize(900, 1200);
   await settings.setSpeakingTransition({
     entry_factor: [1.6, 1.6],
     exit_factor: [1.7, 1.7],
@@ -127,6 +129,7 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
     ["persona:settings-delete-model", "model-id"],
     ["persona:settings-set-default-model", "model-id"],
     ["persona:settings-set-character-size", 1.2],
+    ["persona:settings-set-avatar-window-size", 900, 1200],
     [
       "persona:settings-set-speaking-transition",
       { entry_factor: [1.6, 1.6], exit_factor: [1.7, 1.7] },
@@ -152,6 +155,7 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
   ]);
   assert.deepEqual(sent, [
     ["persona:hide"],
+    ["persona:move-by", 12, -4],
     ["persona:settings-set-window-theme", "light"],
   ]);
 
