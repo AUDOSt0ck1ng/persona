@@ -224,7 +224,10 @@ interface Window {
     connect(): Promise<PersonaVroidHubStatus>;
     disconnect(): Promise<PersonaVroidHubStatus>;
     listCharacters(): Promise<PersonaVroidHubCharacter[]>;
-    selectCharacter(characterId: string): Promise<PersonaSettingsSnapshot>;
+    selectCharacter(
+      characterId: string,
+      characterName: string,
+    ): Promise<PersonaSettingsSnapshot>;
     subscribe(
       listener: (status: PersonaVroidHubStatus) => void,
     ): () => void;

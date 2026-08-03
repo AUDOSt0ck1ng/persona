@@ -695,7 +695,7 @@ export function SettingsPage() {
   const selectVroidCharacter = async (character: PersonaVroidHubCharacter) => {
     if (!vroidHubBridge) return;
     const snapshot = await run(
-      () => vroidHubBridge.selectCharacter(character.id),
+      () => vroidHubBridge.selectCharacter(character.id, character.name),
       `${character.name} is ready to use.`,
     );
     if (!snapshot) return;

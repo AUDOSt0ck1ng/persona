@@ -1016,23 +1016,22 @@ if (!app.requestSingleInstanceLock()) {
     });
     ipcMain.handle(
       "persona:vroid-select-character",
-      async (_event, characterId) => {
+      async (_event, characterId, characterName) => {
         if (!vroidHubAuth?.isConnected()) {
           throw new Error("Connect your VRoid Hub account first.");
         }
         const token = await vroidHubAuth.getValidAccessToken();
-        const characters = await vroidHubClient.listCharacters(token);
-        const character = characters.find(
-          (candidate) => candidate.id === characterId,
-        );
-        if (!character) throw new Error("Character is not available.");
+        // No re-fetch of the character list to check characterId is in it:
+        // that's not a real gate anyway, since /api/download_licenses below
+        // is VRoid Hub's own authority on whether this id is licensable, and
+        // the renderer already has this id from the list it just rendered.
         const buffer = await vroidHubClient.loadCharacterModel(
           token,
           characterId,
         );
         return publishSettings(
           settingsStore.setActiveHubModel(buffer, {
-            model_name: character.name,
+            model_name: characterName,
           }),
         );
       },
