@@ -50,9 +50,112 @@ const LIGHTING_NUMBER_RANGES: Record<
 
 interface ConfirmationRequest {
   confirmLabel: string;
-  detail: string;
+  detail: ReactNode;
   onConfirm: () => Promise<void>;
   title: string;
+}
+
+// Labels mirror VRoid Hub's own conditions-of-use wording, per its developer
+// guidelines for displaying model data conditions of use in a linked app.
+const VROID_LICENSE_FIELDS: Array<{
+  key: keyof PersonaVroidHubCharacterLicense;
+  label: string;
+  values: Record<string, string>;
+}> = [
+  {
+    key: 'characterization_allowed_user',
+    label: 'Who may perform as this character',
+    values: { default: 'Platform default', author: 'Author only', everyone: 'Everyone' },
+  },
+  {
+    key: 'personal_commercial_use',
+    label: 'Personal commercial use',
+    values: {
+      default: 'Platform default',
+      disallow: 'Not allowed',
+      profit: 'Allowed (for-profit)',
+      nonprofit: 'Allowed (non-profit only)',
+    },
+  },
+  {
+    key: 'corporate_commercial_use',
+    label: 'Corporate commercial use',
+    values: { default: 'Platform default', disallow: 'Not allowed', allow: 'Allowed' },
+  },
+  {
+    key: 'modification',
+    label: 'Modification',
+    values: { default: 'Platform default', disallow: 'Not allowed', allow: 'Allowed' },
+  },
+  {
+    key: 'redistribution',
+    label: 'Redistribution',
+    values: { default: 'Platform default', disallow: 'Not allowed', allow: 'Allowed' },
+  },
+  {
+    key: 'credit',
+    label: 'Credit',
+    values: {
+      default: 'Platform default',
+      necessary: 'Required',
+      unnecessary: 'Not required',
+    },
+  },
+  {
+    key: 'violent_expression',
+    label: 'Violent expression',
+    values: { default: 'Platform default', disallow: 'Not allowed', allow: 'Allowed' },
+  },
+  {
+    key: 'sexual_expression',
+    label: 'Sexual expression',
+    values: { default: 'Platform default', disallow: 'Not allowed', allow: 'Allowed' },
+  },
+];
+
+function vroidConditionsOfUse(
+  character: PersonaVroidHubCharacter,
+  onOpenHubPage: () => void,
+): ReactNode {
+  const rows = VROID_LICENSE_FIELDS.map(({ key, label, values }) => {
+    const raw = character.license?.[key];
+    if (raw == null) return null;
+    return { label, value: values[raw] ?? raw };
+  }).filter((row): row is { label: string; value: string } => row != null);
+
+  return (
+    <>
+      <p>
+        {character.name} belongs to another VRoid Hub creator, not your
+        connected account. Review its conditions of use before Persona
+        downloads and uses it.
+      </p>
+      {rows.length > 0 ? (
+        <dl className="vroid-license-terms">
+          {rows.map((row) => (
+            <div key={row.label}>
+              <dt>{row.label}</dt>
+              <dd>{row.value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <p>
+          Persona could not read this character&rsquo;s conditions of use from
+          VRoid Hub.
+        </p>
+      )}
+      <p>
+        <button
+          className="link-button"
+          onClick={onOpenHubPage}
+          type="button"
+        >
+          View {character.name} on VRoid Hub
+        </button>
+      </p>
+    </>
+  );
 }
 
 const SECTIONS: Array<{
@@ -692,7 +795,7 @@ export function SettingsPage() {
     });
   };
 
-  const selectVroidCharacter = async (character: PersonaVroidHubCharacter) => {
+  const activateVroidCharacter = async (character: PersonaVroidHubCharacter) => {
     if (!vroidHubBridge) return;
     const snapshot = await run(
       () => vroidHubBridge.selectCharacter(character.id, character.name),
@@ -701,6 +804,24 @@ export function SettingsPage() {
     if (!snapshot) return;
     const hubModel = snapshot.models.find((model) => model.origin === 'hub');
     if (hubModel) setSelectedModelId(hubModel.id);
+  };
+
+  const selectVroidCharacter = (character: PersonaVroidHubCharacter) => {
+    if (!vroidHubBridge) return;
+    if (character.origin === 'own') {
+      void activateVroidCharacter(character);
+      return;
+    }
+    // VRoid Hub's third-party integration guidelines require a conditions-
+    // of-use confirmation before a hearted (not-owned) model is used.
+    openConfirmation({
+      confirmLabel: 'Use this character',
+      title: 'Model Data Conditions of Use',
+      detail: vroidConditionsOfUse(character, () =>
+        void vroidHubBridge.openCharacterPage(character.id),
+      ),
+      onConfirm: () => activateVroidCharacter(character),
+    });
   };
 
   const beginEditingAnimation = (animation: PersonaAnimationSettings) => {
@@ -2945,9 +3066,12 @@ export function SettingsPage() {
               <h2 id="settings-confirmation-title">
                 {confirmation.title}
               </h2>
-              <p id="settings-confirmation-detail">
+              <div
+                className="settings-dialog-detail"
+                id="settings-confirmation-detail"
+              >
                 {confirmation.detail}
-              </p>
+              </div>
             </div>
             <div className="settings-dialog-actions">
               <button

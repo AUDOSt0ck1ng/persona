@@ -447,7 +447,38 @@ function configureVroidHub(clientId, clientSecret) {
     encrypt: (buffer) => safeStorage.encryptString(buffer.toString("utf8")),
     decrypt: (buffer) => Buffer.from(safeStorage.decryptString(buffer), "utf8"),
   });
-  vroidHubClient = createVroidHubClient({});
+  vroidHubClient = createVroidHubClient({ applicationId: clientId });
+}
+
+// The VRoid Hub bridge is exposed through the same preload script as the
+// avatar overlay window, which renders untrusted user-supplied model/motion
+// files. Every persona:vroid-* handler is sensitive (OAuth credentials,
+// session control, licensed downloads), so each one must confirm its call
+// came from the Settings window, matching persona:report-error and
+// persona:settings-set-window-theme's existing sender checks below.
+// isEncryptionAvailable() alone is not a reliable secrecy guarantee on
+// Linux: without a running keyring (GNOME Secret Service or KWallet over
+// D-Bus), Electron's safeStorage still reports encryption as "available"
+// but silently selects the basic_text backend, which provides no real
+// protection. A packaged build must not tell the user their VRoid Hub
+// client secret and session tokens are OS-keychain-backed when they are
+// not, so this checks the actual selected backend rather than trusting
+// isEncryptionAvailable() by itself. The dev-only plaintext override above
+// intentionally forces basic_text for local convenience, so this check is
+// skipped there.
+function vroidHubSecureStorageAvailable() {
+  if (!safeStorage.isEncryptionAvailable()) return false;
+  if (!app.isPackaged) return true;
+  return safeStorage.getSelectedStorageBackend?.() !== "basic_text";
+}
+
+function requireSettingsSender(event) {
+  if (!settingsWindow || settingsWindow.isDestroyed()) {
+    throw new Error("The Settings window is not available.");
+  }
+  if (event.sender !== settingsWindow.webContents) {
+    throw new Error("This request must come from the Settings window.");
+  }
 }
 
 function vroidHubStatus() {
@@ -815,7 +846,7 @@ if (!app.requestSingleInstanceLock()) {
       app.getPath("userData"),
       "vroid-hub-credentials.json",
     );
-    if (safeStorage.isEncryptionAvailable()) {
+    if (vroidHubSecureStorageAvailable()) {
       const vroidCredentials = readVroidHubCredentials({
         credentialsFilePath: vroidCredentialsFilePath,
         decrypt: (buffer) =>
@@ -946,9 +977,13 @@ if (!app.requestSingleInstanceLock()) {
         settingsSnapshot: settingsStore.getSnapshot(),
       }),
     );
-    ipcMain.handle("persona:vroid-get-status", () => vroidHubStatus());
-    ipcMain.handle("persona:vroid-get-credentials", () => {
-      if (!safeStorage.isEncryptionAvailable()) {
+    ipcMain.handle("persona:vroid-get-status", (event) => {
+      requireSettingsSender(event);
+      return vroidHubStatus();
+    });
+    ipcMain.handle("persona:vroid-get-credentials", (event) => {
+      requireSettingsSender(event);
+      if (!vroidHubSecureStorageAvailable()) {
         return { clientId: null, hasClientSecret: false };
       }
       const credentials = readVroidHubCredentials({
@@ -963,8 +998,9 @@ if (!app.requestSingleInstanceLock()) {
     });
     ipcMain.handle(
       "persona:vroid-set-credentials",
-      (_event, clientId, clientSecret) => {
-        if (!safeStorage.isEncryptionAvailable()) {
+      (event, clientId, clientSecret) => {
+        requireSettingsSender(event);
+        if (!vroidHubSecureStorageAvailable()) {
           throw new Error(
             "This OS has no secure credential storage available, so VRoid Hub credentials cannot be saved.",
           );
@@ -984,7 +1020,8 @@ if (!app.requestSingleInstanceLock()) {
         return vroidHubStatus();
       },
     );
-    ipcMain.handle("persona:vroid-clear-credentials", () => {
+    ipcMain.handle("persona:vroid-clear-credentials", (event) => {
+      requireSettingsSender(event);
       clearVroidHubCredentials({ credentialsFilePath: vroidCredentialsFilePath });
       vroidHubAuth?.disconnect();
       vroidHubAuth = null;
@@ -993,7 +1030,8 @@ if (!app.requestSingleInstanceLock()) {
       broadcastVroidHubStatus();
       return vroidHubStatus();
     });
-    ipcMain.handle("persona:vroid-connect", () => {
+    ipcMain.handle("persona:vroid-connect", (event) => {
+      requireSettingsSender(event);
       if (!vroidHubAuth) {
         throw new Error(
           "VRoid Hub is not configured. Add your VRoid Hub app credentials in Settings first.",
@@ -1002,12 +1040,14 @@ if (!app.requestSingleInstanceLock()) {
       void shell.openExternal(vroidHubAuth.buildAuthorizeUrl());
       return vroidHubStatus();
     });
-    ipcMain.handle("persona:vroid-disconnect", () => {
+    ipcMain.handle("persona:vroid-disconnect", (event) => {
+      requireSettingsSender(event);
       vroidHubAuth?.disconnect();
       publishSettings(settingsStore.clearActiveHubModel());
       return vroidHubStatus();
     });
-    ipcMain.handle("persona:vroid-list-characters", async () => {
+    ipcMain.handle("persona:vroid-list-characters", async (event) => {
+      requireSettingsSender(event);
       if (!vroidHubAuth?.isConnected()) {
         throw new Error("Connect your VRoid Hub account first.");
       }
@@ -1016,7 +1056,8 @@ if (!app.requestSingleInstanceLock()) {
     });
     ipcMain.handle(
       "persona:vroid-select-character",
-      async (_event, characterId, characterName) => {
+      async (event, characterId, characterName) => {
+        requireSettingsSender(event);
         if (!vroidHubAuth?.isConnected()) {
           throw new Error("Connect your VRoid Hub account first.");
         }
@@ -1033,6 +1074,21 @@ if (!app.requestSingleInstanceLock()) {
           settingsStore.setActiveHubModel(buffer, {
             model_name: characterName,
           }),
+        );
+      },
+    );
+    // Builds the character's Hub page from a bare id rather than trusting a
+    // full URL from the renderer, so this can only ever open
+    // hub.vroid.com/characters/<id>.
+    ipcMain.handle(
+      "persona:vroid-open-character-page",
+      (event, characterId) => {
+        requireSettingsSender(event);
+        if (typeof characterId !== "string" || characterId === "") {
+          throw new Error("A character id is required.");
+        }
+        void shell.openExternal(
+          `https://hub.vroid.com/characters/${encodeURIComponent(characterId)}`,
         );
       },
     );

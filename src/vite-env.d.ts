@@ -141,11 +141,26 @@ interface PersonaVroidHubCredentials {
   hasClientSecret: boolean;
 }
 
+type VroidHubUsagePermission = 'default' | 'disallow' | 'allow';
+
+interface PersonaVroidHubCharacterLicense {
+  characterization_allowed_user?: 'default' | 'author' | 'everyone';
+  personal_commercial_use?: 'default' | 'disallow' | 'profit' | 'nonprofit';
+  corporate_commercial_use?: VroidHubUsagePermission;
+  modification?: VroidHubUsagePermission;
+  redistribution?: VroidHubUsagePermission;
+  credit?: 'default' | 'necessary' | 'unnecessary';
+  violent_expression?: VroidHubUsagePermission;
+  sexual_expression?: VroidHubUsagePermission;
+}
+
 interface PersonaVroidHubCharacter {
   id: string;
   name: string;
   is_downloadable: boolean;
   portrait_url: string | null;
+  origin: 'own' | 'hearted';
+  license: PersonaVroidHubCharacterLicense | null;
 }
 
 type AvatarBridgeEvent =
@@ -228,6 +243,7 @@ interface Window {
       characterId: string,
       characterName: string,
     ): Promise<PersonaSettingsSnapshot>;
+    openCharacterPage(characterId: string): Promise<void>;
     subscribe(
       listener: (status: PersonaVroidHubStatus) => void,
     ): () => void;

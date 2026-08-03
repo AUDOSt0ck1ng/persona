@@ -21,7 +21,19 @@ function authorizedHeaders({ accessToken, tokenType = "Bearer" } = {}, extra = {
   };
 }
 
-function toCharacterSummary(model) {
+// VRoid Hub's conditions-of-use fields live at different paths depending on
+// which VRM spec version the model was exported with (VRM 1.0 nests them
+// under the latest version's vrm_meta; VRM 0.0 exposes a top-level license
+// object), per developer.vroid.com's CharacterModelSerializer reference.
+function characterLicense(model) {
+  return (
+    model.latest_character_model_version?.vrm_meta?.license ??
+    model.license ??
+    null
+  );
+}
+
+function toCharacterSummary(model, origin) {
   return {
     id: model.id,
     name:
@@ -31,6 +43,8 @@ function toCharacterSummary(model) {
     is_downloadable: Boolean(model.is_downloadable),
     portrait_url:
       model.portrait_image?.q75?.url ?? model.portrait_image?.original?.url ?? null,
+    origin,
+    license: characterLicense(model),
   };
 }
 
@@ -42,7 +56,11 @@ function toCharacterSummary(model) {
  * `require("electron")`, so it can be unit tested against a plain fake HTTP
  * server instead of mocking Electron.
  */
-function createVroidHubClient({ baseUrl = DEFAULT_BASE_URL, fetchImpl = fetch } = {}) {
+function createVroidHubClient({
+  applicationId,
+  baseUrl = DEFAULT_BASE_URL,
+  fetchImpl = fetch,
+} = {}) {
   async function fetchJson(pathname, token) {
     const url = new URL(pathname, baseUrl);
     const response = await fetchImpl(url.toString(), {
@@ -56,9 +74,13 @@ function createVroidHubClient({ baseUrl = DEFAULT_BASE_URL, fetchImpl = fetch } 
   }
 
   async function listCharacters(token) {
+    // application_id scopes the hearts lookup to this registered app, as
+    // VRoid Hub's API requires for the heart-scoped endpoints.
+    const heartsQuery = new URLSearchParams({ count: String(PAGE_SIZE) });
+    if (applicationId) heartsQuery.set("application_id", applicationId);
     const [account, hearts] = await Promise.all([
       fetchJson(`/api/account/character_models?count=${PAGE_SIZE}`, token),
-      fetchJson(`/api/hearts?count=${PAGE_SIZE}`, token),
+      fetchJson(`/api/hearts?${heartsQuery.toString()}`, token),
     ]);
     const ownModels = Array.isArray(account?.data) ? account.data : [];
     // Only the connected account unconditionally owns its own models; a
@@ -69,9 +91,19 @@ function createVroidHubClient({ baseUrl = DEFAULT_BASE_URL, fetchImpl = fetch } 
       .map((heart) => heart.character_model)
       .filter((model) => model?.is_other_users_available === true);
 
+    const ownIds = new Set(
+      ownModels
+        .map((model) => model?.id)
+        .filter((id) => typeof id === "string"),
+    );
     const byId = new Map();
     for (const model of [...ownModels, ...heartedModels]) {
-      if (typeof model?.id === "string") byId.set(model.id, toCharacterSummary(model));
+      if (typeof model?.id !== "string") continue;
+      // A model the account both owns and has hearted is still its own —
+      // ownership, not the heart, is what exempts it from the third-party
+      // conditions-of-use gate.
+      const origin = ownIds.has(model.id) ? "own" : "hearted";
+      byId.set(model.id, toCharacterSummary(model, origin));
     }
     return [...byId.values()];
   }

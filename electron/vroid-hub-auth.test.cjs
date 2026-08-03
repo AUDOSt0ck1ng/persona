@@ -55,7 +55,7 @@ test("builds an authorize URL with PKCE and state", (context) => {
   const auth = createAuth(context, { fetchImpl: async () => jsonResponse(200, {}) });
   const url = new URL(auth.buildAuthorizeUrl());
 
-  assert.equal(url.origin + url.pathname, "https://hub.vroid.com/authorize/confirm");
+  assert.equal(url.origin + url.pathname, "https://hub.vroid.com/oauth/authorize");
   assert.equal(url.searchParams.get("response_type"), "code");
   assert.equal(url.searchParams.get("client_id"), "client-123");
   assert.equal(

@@ -106,6 +106,7 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
   await vroidHub.disconnect();
   await vroidHub.listCharacters();
   await vroidHub.selectCharacter("character-id", "Character Name");
+  await vroidHub.openCharacterPage("character-id");
 
   assert.deepEqual(invocations, [
     ["persona:get-snapshot"],
@@ -169,6 +170,7 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
     ["persona:vroid-disconnect"],
     ["persona:vroid-list-characters"],
     ["persona:vroid-select-character", "character-id", "Character Name"],
+    ["persona:vroid-open-character-page", "character-id"],
   ]);
   assert.deepEqual(sent, [
     ["persona:hide"],

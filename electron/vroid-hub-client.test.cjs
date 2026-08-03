@@ -50,6 +50,7 @@ function characterModel(overrides = {}) {
 }
 
 test("lists the account's own models and eligible hearted models, filtering ineligible hearts", async (context) => {
+  let heartsUrl = null;
   const server = await startFakeHub(context, {
     onRequest(request, response) {
       if (request.url.startsWith("/api/account/character_models")) {
@@ -60,6 +61,7 @@ test("lists the account's own models and eligible hearted models, filtering inel
         });
       }
       if (request.url.startsWith("/api/hearts")) {
+        heartsUrl = request.url;
         return json(response, 200, {
           data: [
             {
@@ -86,6 +88,7 @@ test("lists the account's own models and eligible hearted models, filtering inel
     },
   });
   const client = createVroidHubClient({
+    applicationId: "app-123",
     baseUrl: `http://127.0.0.1:${server.address().port}`,
   });
 
@@ -94,6 +97,14 @@ test("lists the account's own models and eligible hearted models, filtering inel
   assert.deepEqual(
     characters.map((character) => character.id).sort(),
     ["hearted-allowed", "own-1"],
+  );
+  assert.deepEqual(
+    Object.fromEntries(characters.map((character) => [character.id, character.origin])),
+    { "hearted-allowed": "hearted", "own-1": "own" },
+  );
+  assert.equal(
+    new URL(heartsUrl, "http://x").searchParams.get("application_id"),
+    "app-123",
   );
 });
 

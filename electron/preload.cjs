@@ -91,6 +91,8 @@ contextBridge.exposeInMainWorld("personaVroidHub", {
       characterId,
       characterName,
     ),
+  openCharacterPage: (characterId) =>
+    ipcRenderer.invoke("persona:vroid-open-character-page", characterId),
   subscribe: (listener) => {
     const handler = (_event, status) => listener(status);
     ipcRenderer.on("persona:vroid-status-updated", handler);

@@ -219,9 +219,11 @@ scheme, so sign-in works the same way from `npm run dev`/`demo` and from an
 installed build. Paste the app's client ID and secret into Settings and save
 — they're encrypted at rest with Electron's `safeStorage` (OS
 keychain-backed) in `vroid-hub-credentials.json`, the same mechanism used for
-the resulting session tokens (`vroid-hub-auth.json`). If `safeStorage` isn't
-available on the current OS, the feature stays disabled rather than storing
-either in plaintext.
+the resulting session tokens (`vroid-hub-auth.json`). On Linux, a packaged
+build also confirms the OS keyring backend is actually selected rather than
+`safeStorage`'s insecure `basic_text` fallback (used when no GNOME Secret
+Service or KWallet is running). If real OS-backed encryption isn't available,
+the feature stays disabled rather than storing either in plaintext.
 
 With no credentials configured, "Connect VRoid Hub account" in Settings stays
 disabled. When configured, Settings opens the VRoid Hub authorization page in

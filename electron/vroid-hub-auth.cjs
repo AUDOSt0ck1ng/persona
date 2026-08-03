@@ -4,7 +4,7 @@ const nodeCrypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const AUTHORIZE_URL = "https://hub.vroid.com/authorize/confirm";
+const AUTHORIZE_URL = "https://hub.vroid.com/oauth/authorize";
 const TOKEN_URL = "https://hub.vroid.com/oauth/token";
 // VRoid Hub's own API version header, unrelated to this app's version.
 const API_VERSION = "11";
