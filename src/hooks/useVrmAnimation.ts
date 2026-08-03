@@ -26,6 +26,7 @@ import {
   speakingChunkTransitionDurations,
   shouldAdvanceSpeakingSequence,
 } from '../speaking-chunks';
+import { createLoopSwapHandler } from '../loop-swap';
 
 interface PlayOptions {
   animationUrls?: readonly string[];
@@ -82,6 +83,7 @@ export function useVrmAnimation(
     type: PlayableAnimationType;
     urls: readonly string[];
     generation: number;
+    swapping: boolean;
   } | null>(null);
   const fadingActions = useRef(new Set<THREE.AnimationAction>());
   const pendingTransitionActions = useRef<THREE.AnimationAction[]>([]);
@@ -157,41 +159,18 @@ export function useVrmAnimation(
       pendingCompletion.current = null;
       pending.callback();
     };
-    const handleLoop = ({ action }: { action: THREE.AnimationAction }) => {
-      const selection = activeLoopSelection.current;
-      if (
-        !selection ||
-        action !== current.current ||
-        selection.generation !== requestGeneration.current ||
-        selection.urls.length < 2
-      ) {
-        return;
-      }
-      const nextUrl = randomAnimationUrl(
-        selection.urls,
-        previousAnimation.current.get(selection.type) ?? null,
-      );
-      if (!nextUrl) return;
-      previousAnimation.current.set(selection.type, nextUrl);
-      void loadClip(nextUrl)
-        .then((clip) => {
-          if (
-            selection.generation !== requestGeneration.current ||
-            !mixer.current ||
-            current.current !== action
-          ) {
-            return;
-          }
-          const nextAction = mixer.current.clipAction(clip);
-          nextAction.reset();
-          configureAnimationAction(nextAction, 'loop');
-          fadeTo(nextAction, bodyTransitionSecondsRef.current);
-          current.current = nextAction;
-        })
-        .catch((error: unknown) => {
-          console.warn('[persona] animation load failed', error);
-        });
-    };
+    const handleLoop = createLoopSwapHandler({
+      activeLoopSelection,
+      current,
+      requestGeneration,
+      mixer,
+      previousAnimation: previousAnimation.current,
+      bodyTransitionSeconds: bodyTransitionSecondsRef,
+      loadClip,
+      fadeTo,
+      onLoadError: (error) =>
+        console.warn('[persona] animation load failed', error),
+    });
     animationMixer.addEventListener('finished', handleFinished);
     animationMixer.addEventListener('loop', handleLoop);
     mixer.current = animationMixer;
@@ -382,6 +361,7 @@ export function useVrmAnimation(
             type,
             urls: uniqueAnimationUrls,
             generation,
+            swapping: false,
           };
         }
         if (playback === 'once') {
