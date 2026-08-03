@@ -26,6 +26,7 @@ import {
   speakingChunkTransitionDurations,
   shouldAdvanceSpeakingSequence,
 } from '../speaking-chunks';
+import { createLoopSwapHandler } from '../loop-swap';
 
 interface PlayOptions {
   animationUrls?: readonly string[];
@@ -78,6 +79,12 @@ export function useVrmAnimation(
   const pendingCompletion = useRef<PendingCompletion | null>(null);
   const speakingSequence = useRef<SpeakingSequence | null>(null);
   const speakingBlend = useRef<SpeakingBlend | null>(null);
+  const activeLoopSelection = useRef<{
+    type: PlayableAnimationType;
+    urls: readonly string[];
+    generation: number;
+    swapping: boolean;
+  } | null>(null);
   const fadingActions = useRef(new Set<THREE.AnimationAction>());
   const pendingTransitionActions = useRef<THREE.AnimationAction[]>([]);
   const speakingTransitionRef = useRef(speakingTransition);
@@ -87,40 +94,6 @@ export function useVrmAnimation(
   speakingTransitionRef.current = speakingTransition;
   bodyTransitionSecondsRef.current = bodyTransitionSeconds;
   speakingActiveRef.current = speakingActive;
-
-  useEffect(() => {
-    if (!vrm) return;
-    const animationHistory = previousAnimation.current;
-    const fadingActionSet = fadingActions.current;
-    const animationMixer = new THREE.AnimationMixer(vrm.scene);
-    const handleFinished = ({ action }: { action: THREE.AnimationAction }) => {
-      const pending = pendingCompletion.current;
-      if (
-        pending?.action !== action ||
-        pending.generation !== requestGeneration.current
-      ) {
-        return;
-      }
-      pendingCompletion.current = null;
-      pending.callback();
-    };
-    animationMixer.addEventListener('finished', handleFinished);
-    mixer.current = animationMixer;
-    return () => {
-      animationMixer.removeEventListener('finished', handleFinished);
-      animationMixer.stopAllAction();
-      mixer.current = null;
-      current.current = null;
-      currentType.current = null;
-      pendingCompletion.current = null;
-      speakingSequence.current = null;
-      speakingBlend.current = null;
-      fadingActionSet.clear();
-      pendingTransitionActions.current = [];
-      speakingWasActive.current = speakingActiveRef.current;
-      animationHistory.clear();
-    };
-  }, [vrm]);
 
   const load = useCallback(async (url: string) => {
     const cached = cache.current.get(url);
@@ -169,6 +142,55 @@ export function useVrmAnimation(
     },
     [],
   );
+
+  useEffect(() => {
+    if (!vrm) return;
+    const animationHistory = previousAnimation.current;
+    const fadingActionSet = fadingActions.current;
+    const animationMixer = new THREE.AnimationMixer(vrm.scene);
+    const handleFinished = ({ action }: { action: THREE.AnimationAction }) => {
+      const pending = pendingCompletion.current;
+      if (
+        pending?.action !== action ||
+        pending.generation !== requestGeneration.current
+      ) {
+        return;
+      }
+      pendingCompletion.current = null;
+      pending.callback();
+    };
+    const handleLoop = createLoopSwapHandler({
+      activeLoopSelection,
+      current,
+      requestGeneration,
+      mixer,
+      previousAnimation: previousAnimation.current,
+      bodyTransitionSeconds: bodyTransitionSecondsRef,
+      loadClip,
+      fadeTo,
+      onLoadError: (error) =>
+        console.warn('[persona] animation load failed', error),
+    });
+    animationMixer.addEventListener('finished', handleFinished);
+    animationMixer.addEventListener('loop', handleLoop);
+    mixer.current = animationMixer;
+    return () => {
+      animationMixer.removeEventListener('finished', handleFinished);
+      animationMixer.removeEventListener('loop', handleLoop);
+      animationMixer.stopAllAction();
+      mixer.current = null;
+      current.current = null;
+      currentType.current = null;
+      pendingCompletion.current = null;
+      speakingSequence.current = null;
+      speakingBlend.current = null;
+      activeLoopSelection.current = null;
+      fadingActionSet.clear();
+      pendingTransitionActions.current = [];
+      speakingWasActive.current = speakingActiveRef.current;
+      animationHistory.clear();
+    };
+  }, [vrm, loadClip, fadeTo]);
 
   const advanceSpeakingSequence = useCallback(
     async function advance(generation: number): Promise<void> {
@@ -274,6 +296,7 @@ export function useVrmAnimation(
       const generation = ++requestGeneration.current;
       pendingCompletion.current = null;
       speakingSequence.current = null;
+      activeLoopSelection.current = null;
       const interruptedBlend = speakingBlend.current;
       if (interruptedBlend) {
         pendingTransitionActions.current = [
@@ -334,6 +357,14 @@ export function useVrmAnimation(
         const fadeSeconds = bodyTransitionSecondsRef.current;
         action.reset();
         configureAnimationAction(action, playback);
+        if (playback === 'loop') {
+          activeLoopSelection.current = {
+            type,
+            urls: uniqueAnimationUrls,
+            generation,
+            swapping: false,
+          };
+        }
         if (playback === 'once') {
           if (onComplete) {
             pendingCompletion.current = {
