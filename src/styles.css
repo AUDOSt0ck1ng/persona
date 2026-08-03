@@ -1695,8 +1695,41 @@ button {
 }
 
 .avatar-window-size-row label {
+  display: flex;
   flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
   margin-bottom: 0;
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+}
+
+.avatar-window-size-row input {
+  width: 100%;
+  height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  outline: none;
+  color: var(--text-primary);
+  background: var(--bg-inset);
+  font-size: var(--fs-md);
+  font-variant-numeric: tabular-nums;
+  caret-color: var(--accent-text);
+  transition:
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
+}
+
+.avatar-window-size-row input:hover {
+  border-color: var(--border-strong);
+}
+
+.avatar-window-size-row input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 /* --- Lighting controls -------------------------------------------------- */
