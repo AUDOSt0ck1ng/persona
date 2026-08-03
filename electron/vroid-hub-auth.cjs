@@ -11,6 +11,7 @@ const API_VERSION = "11";
 const PENDING_FLOW_TIMEOUT_MS = 10 * 60 * 1000;
 const TOKEN_REFRESH_SKEW_MS = 60 * 1000;
 const DEFAULT_EXPIRES_IN_SECONDS = 60 * 60;
+const TOKEN_REQUEST_TIMEOUT_MS = 15 * 1000;
 
 function base64UrlEncode(buffer) {
   return buffer
@@ -168,6 +169,7 @@ function createVroidHubAuth({
         code_verifier: flow.codeVerifier,
         redirect_uri: redirectUri,
       }),
+      signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) {
       throw new Error(`VRoid Hub sign-in failed (${response.status}).`);
@@ -186,6 +188,7 @@ function createVroidHubAuth({
         client_id: clientId,
         client_secret: clientSecret,
       }),
+      signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) {
       tokens = null;

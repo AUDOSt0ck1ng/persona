@@ -4,6 +4,11 @@ const DEFAULT_BASE_URL = "https://hub.vroid.com";
 // VRoid Hub's own API version header, unrelated to this app's version.
 const API_VERSION = "11";
 const PAGE_SIZE = 12;
+const API_REQUEST_TIMEOUT_MS = 15 * 1000;
+// The actual VRM binary can be up to MAX_ASSET_BYTES (200 MB, enforced in
+// settings-store.cjs) and is fetched from a presigned storage URL, not
+// hub.vroid.com's own API, so it gets a longer allowance than the JSON calls.
+const DOWNLOAD_TIMEOUT_MS = 120 * 1000;
 
 function authorizedHeaders({ accessToken, tokenType = "Bearer" } = {}, extra = {}) {
   if (typeof accessToken !== "string" || accessToken === "") {
@@ -42,6 +47,7 @@ function createVroidHubClient({ baseUrl = DEFAULT_BASE_URL, fetchImpl = fetch } 
     const url = new URL(pathname, baseUrl);
     const response = await fetchImpl(url.toString(), {
       headers: authorizedHeaders(token),
+      signal: AbortSignal.timeout(API_REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) {
       throw new Error(`VRoid Hub API request failed (${response.status}).`);
@@ -80,6 +86,7 @@ function createVroidHubClient({ baseUrl = DEFAULT_BASE_URL, fetchImpl = fetch } 
         method: "POST",
         headers: authorizedHeaders(token, { "content-type": "application/json" }),
         body: JSON.stringify({ character_model_id: characterId }),
+        signal: AbortSignal.timeout(API_REQUEST_TIMEOUT_MS),
       },
     );
     if (!licenseResponse.ok) {
@@ -99,14 +106,21 @@ function createVroidHubClient({ baseUrl = DEFAULT_BASE_URL, fetchImpl = fetch } 
     // opaque-redirect response, which is what makes this two-step flow work.
     const downloadResponse = await fetchImpl(
       new URL(`/api/download_licenses/${licenseId}/download`, baseUrl).toString(),
-      { method: "GET", redirect: "manual", headers: authorizedHeaders(token) },
+      {
+        method: "GET",
+        redirect: "manual",
+        headers: authorizedHeaders(token),
+        signal: AbortSignal.timeout(API_REQUEST_TIMEOUT_MS),
+      },
     );
     const downloadUrl = downloadResponse.headers.get("location");
     if (typeof downloadUrl !== "string" || downloadUrl === "") {
       throw new Error("VRoid Hub did not return a model download URL.");
     }
 
-    const fileResponse = await fetchImpl(downloadUrl);
+    const fileResponse = await fetchImpl(downloadUrl, {
+      signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+    });
     if (!fileResponse.ok) {
       throw new Error(`Downloading the VRM file failed (${fileResponse.status}).`);
     }
