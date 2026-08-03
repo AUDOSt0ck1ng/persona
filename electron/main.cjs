@@ -21,7 +21,12 @@ const { createPersonaMcpHandler } = require("./mcp-server.cjs");
 const {
   createMcpSettingsStatus,
 } = require("./mcp-settings-status.cjs");
-const { createSettingsStore } = require("./settings-store.cjs");
+const {
+  createSettingsStore,
+  DEFAULT_AVATAR_WINDOW_SIZE,
+  MIN_AVATAR_WINDOW_WIDTH,
+  MIN_AVATAR_WINDOW_HEIGHT,
+} = require("./settings-store.cjs");
 const {
   configureHyprlandWindow,
   getHyprlandWindowPlacement,
@@ -40,8 +45,6 @@ const {
   settingsPatternFromVoiceSource,
 } = require("./voice-source.cjs");
 
-const WINDOW_WIDTH = 430;
-const WINDOW_HEIGHT = 680;
 const SETTINGS_WINDOW_WIDTH = 1180;
 const SETTINGS_WINDOW_HEIGHT = 780;
 // Chromium paints this behind newly exposed areas during a resize, so it must
@@ -116,6 +119,17 @@ function hasConfiguredModel() {
   return modelConfigured;
 }
 
+function avatarWindowSize() {
+  return settingsStore?.getSnapshot().avatar_window ?? DEFAULT_AVATAR_WINDOW_SIZE;
+}
+
+function applyAvatarWindowSize() {
+  if (!avatarWindow || avatarWindow.isDestroyed()) return;
+  const { width, height } = avatarWindowSize();
+  avatarWindow.setSize(width, height);
+  scheduleHyprlandWindowConfiguration({ force: true, reposition: false });
+}
+
 function scheduleHyprlandWindowConfiguration({
   attempt = 0,
   force = false,
@@ -145,10 +159,11 @@ function scheduleHyprlandWindowConfiguration({
       return;
     }
     hyprlandConfiguring = true;
+    const { width, height } = avatarWindowSize();
     const configured = await configureHyprlandWindow({
       pid: process.pid,
-      width: WINDOW_WIDTH,
-      height: WINDOW_HEIGHT,
+      width,
+      height,
       onDebug: debugLog,
       position,
       reposition,
@@ -250,11 +265,12 @@ function secureRendererWindow(window, allowedRendererUrl) {
 function createWindow() {
   if (avatarWindow && !avatarWindow.isDestroyed()) return avatarWindow;
 
+  const { width, height } = avatarWindowSize();
   const window = new BrowserWindow({
-    width: WINDOW_WIDTH,
-    height: WINDOW_HEIGHT,
-    minWidth: 320,
-    minHeight: 480,
+    width,
+    height,
+    minWidth: MIN_AVATAR_WINDOW_WIDTH,
+    minHeight: MIN_AVATAR_WINDOW_HEIGHT,
     show: false,
     frame: false,
     transparent: true,
@@ -792,6 +808,16 @@ if (!app.requestSingleInstanceLock()) {
       publishSettings(settingsStore.setCharacterSize(size)),
     );
     ipcMain.handle(
+      "persona:settings-set-avatar-window-size",
+      (_event, width, height) => {
+        const snapshot = publishSettings(
+          settingsStore.setAvatarWindowSize(width, height),
+        );
+        applyAvatarWindowSize();
+        return snapshot;
+      },
+    );
+    ipcMain.handle(
       "persona:settings-set-speaking-transition",
       (_event, transition) =>
         publishSettings(settingsStore.setSpeakingTransition(transition)),
@@ -859,6 +885,28 @@ if (!app.requestSingleInstanceLock()) {
       }),
     );
     ipcMain.on("persona:hide", () => void hideOverlay());
+    // The avatar window is frameless with no OS-drawn titlebar, and its only
+    // draggable surface (left-click) is already claimed by orbit controls,
+    // so window manager "drag the titlebar" gestures don't apply to it. This
+    // gives the renderer an explicit, platform-independent way to reposition
+    // it (bound to an Alt+drag gesture) instead of relying on each OS/desktop
+    // environment's own window-move affordance.
+    ipcMain.on("persona:move-by", (_event, dx, dy) => {
+      if (!avatarWindow || avatarWindow.isDestroyed()) return;
+      if (
+        typeof dx !== "number" ||
+        typeof dy !== "number" ||
+        !Number.isFinite(dx) ||
+        !Number.isFinite(dy)
+      ) {
+        return;
+      }
+      const bounds = avatarWindow.getBounds();
+      avatarWindow.setPosition(
+        Math.round(bounds.x + dx),
+        Math.round(bounds.y + dy),
+      );
+    });
     // The resolved theme lives in renderer storage, so the window chrome can
     // only be corrected once the settings renderer reports it. Accepts the two
     // known theme names and never a caller-supplied colour.

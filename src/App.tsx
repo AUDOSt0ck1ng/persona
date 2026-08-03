@@ -19,6 +19,7 @@ import {
   loadPackagedSettingsFallback,
   SETTINGS_FALLBACK,
 } from './settings-defaults';
+import { useWindowDrag } from './hooks/useWindowDrag';
 import {
   BODY_SPEECH_LEVEL_THRESHOLD,
   bodySpeechSignalActive,
@@ -32,6 +33,7 @@ const INITIAL_STATE: VoiceState = {
 };
 
 export function App() {
+  useWindowDrag();
   const [voice, setVoice] = useState<VoiceState>(INITIAL_STATE);
   const [audioLevel, setAudioLevel] = useState(0);
   const [hasObservedAudioLevel, setHasObservedAudioLevel] = useState(false);

@@ -330,6 +330,12 @@ test("validates custom metadata, files, duplicates, and appearance settings", (c
   assert.equal(store.setSpeakingDebounceMs(650).speaking_debounce_ms, 650);
   assert.throws(() => store.setIdleInterimMs(-1), /between/);
   assert.equal(store.setIdleInterimMs(450).idle_interim_ms, 450);
+  assert.throws(() => store.setAvatarWindowSize(100, 700), /width/);
+  assert.throws(() => store.setAvatarWindowSize(500, 100), /height/);
+  assert.deepEqual(store.setAvatarWindowSize(900, 1200).avatar_window, {
+    width: 900,
+    height: 1200,
+  });
   assert.throws(
     () =>
       store.setSpeakingTransition({

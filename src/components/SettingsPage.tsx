@@ -14,6 +14,10 @@ import {
 } from '../animation-catalog';
 import {
   loadPackagedSettingsFallback,
+  MAX_AVATAR_WINDOW_HEIGHT,
+  MAX_AVATAR_WINDOW_WIDTH,
+  MIN_AVATAR_WINDOW_HEIGHT,
+  MIN_AVATAR_WINDOW_WIDTH,
   SETTINGS_FALLBACK,
   resolveLightingSettings,
 } from '../settings-defaults';
@@ -250,6 +254,12 @@ export function SettingsPage() {
   const [section, setSection] = useState<SettingsSection>('models');
   const [selectedModelId, setSelectedModelId] = useState(
     SETTINGS_FALLBACK.default_model_id,
+  );
+  const [avatarWidthInput, setAvatarWidthInput] = useState(
+    String(SETTINGS_FALLBACK.avatar_window.width),
+  );
+  const [avatarHeightInput, setAvatarHeightInput] = useState(
+    String(SETTINGS_FALLBACK.avatar_window.height),
   );
   const [previewAnimation, setPreviewAnimation] =
     useState<PersonaAnimationSettings | null>(null);
@@ -767,6 +777,32 @@ export function SettingsPage() {
     await persistAppearance(
       () => bridge.setCharacterSize(size),
       `Default character size set to ${Math.round(size * 100)}%.`,
+    );
+  };
+
+  useEffect(() => {
+    setAvatarWidthInput(String(settings.avatar_window.width));
+    setAvatarHeightInput(String(settings.avatar_window.height));
+  }, [settings.avatar_window]);
+
+  const avatarWidth = Math.round(Number(avatarWidthInput));
+  const avatarHeight = Math.round(Number(avatarHeightInput));
+  const avatarWindowSizeValid =
+    Number.isFinite(avatarWidth) &&
+    avatarWidth >= MIN_AVATAR_WINDOW_WIDTH &&
+    avatarWidth <= MAX_AVATAR_WINDOW_WIDTH &&
+    Number.isFinite(avatarHeight) &&
+    avatarHeight >= MIN_AVATAR_WINDOW_HEIGHT &&
+    avatarHeight <= MAX_AVATAR_WINDOW_HEIGHT;
+  const avatarWindowSizeChanged =
+    avatarWidth !== settings.avatar_window.width ||
+    avatarHeight !== settings.avatar_window.height;
+
+  const saveAvatarWindowSize = async () => {
+    if (!bridge || !avatarWindowSizeValid) return;
+    await run(
+      () => bridge.setAvatarWindowSize(avatarWidth, avatarHeight),
+      `Avatar window resized to ${avatarWidth}×${avatarHeight}.`,
     );
   };
 
@@ -1643,6 +1679,72 @@ export function SettingsPage() {
                   <span>Default</span>
                   <span>160%</span>
                 </div>
+              </section>
+
+              <section className="settings-panel appearance-panel">
+                <div className="panel-heading">
+                  <div>
+                    <h2>Avatar window size</h2>
+                    <p>
+                      Set the pixel width and height of the Avatar window.
+                    </p>
+                  </div>
+                </div>
+                <div className="avatar-window-size-row">
+                  <label>
+                    Width
+                    <input
+                      aria-label="Avatar window width"
+                      max={MAX_AVATAR_WINDOW_WIDTH}
+                      min={MIN_AVATAR_WINDOW_WIDTH}
+                      onChange={(event) =>
+                        setAvatarWidthInput(event.currentTarget.value)
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') void saveAvatarWindowSize();
+                      }}
+                      step="1"
+                      type="number"
+                      value={avatarWidthInput}
+                    />
+                  </label>
+                  <label>
+                    Height
+                    <input
+                      aria-label="Avatar window height"
+                      max={MAX_AVATAR_WINDOW_HEIGHT}
+                      min={MIN_AVATAR_WINDOW_HEIGHT}
+                      onChange={(event) =>
+                        setAvatarHeightInput(event.currentTarget.value)
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') void saveAvatarWindowSize();
+                      }}
+                      step="1"
+                      type="number"
+                      value={avatarHeightInput}
+                    />
+                  </label>
+                </div>
+                <button
+                  className="primary-button"
+                  disabled={
+                    busy ||
+                    !bridge ||
+                    !avatarWindowSizeValid ||
+                    !avatarWindowSizeChanged
+                  }
+                  onClick={() => void saveAvatarWindowSize()}
+                  type="button"
+                >
+                  Apply
+                </button>
+                {!bridge && (
+                  <p className="desktop-note">
+                    Resizing the avatar window is available in the Persona
+                    desktop app.
+                  </p>
+                )}
               </section>
 
               <section className="settings-panel lighting-panel">

@@ -5,6 +5,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("personaBridge", {
   getSnapshot: () => ipcRenderer.invoke("persona:get-snapshot"),
   hide: () => ipcRenderer.send("persona:hide"),
+  moveBy: (dx, dy) => ipcRenderer.send("persona:move-by", dx, dy),
   subscribe: (listener) => {
     const handler = (_event, payload) => listener(payload);
     ipcRenderer.on("persona:event", handler);
@@ -42,6 +43,12 @@ contextBridge.exposeInMainWorld("personaSettings", {
     ipcRenderer.invoke("persona:settings-set-default-model", modelId),
   setCharacterSize: (size) =>
     ipcRenderer.invoke("persona:settings-set-character-size", size),
+  setAvatarWindowSize: (width, height) =>
+    ipcRenderer.invoke(
+      "persona:settings-set-avatar-window-size",
+      width,
+      height,
+    ),
   setSpeakingTransition: (transition) =>
     ipcRenderer.invoke(
       "persona:settings-set-speaking-transition",
