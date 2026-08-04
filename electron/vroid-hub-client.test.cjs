@@ -137,7 +137,12 @@ test("follows _links.next.href until exhausted so nothing past the first page is
         if (url.searchParams.get("max_id") == null) {
           return json(response, 200, {
             data: [characterModel({ id: "hearted-1" })],
-            _links: { next: { href: "/api/hearts?count=100&max_id=2" } },
+            // The heart endpoint's next link carries application_id forward;
+            // the client has to follow the href's query as given, not rebuild
+            // it, or page 2 loses the app scoping.
+            _links: {
+              next: { href: "/api/hearts?count=100&application_id=app-123&max_id=2" },
+            },
           });
         }
         return json(response, 200, { data: [characterModel({ id: "hearted-2" })] });
@@ -161,9 +166,21 @@ test("follows _links.next.href until exhausted so nothing past the first page is
     requestedUrls.filter((url) => url.startsWith("/api/account/character_models")).length,
     3,
   );
+  // Ask for the API's maximum page size, and keep every query parameter the
+  // next link hands back rather than reassembling the URL ourselves.
+  const [firstAccountUrl] = requestedUrls.filter((url) =>
+    url.startsWith("/api/account/character_models"),
+  );
+  const heartsUrls = requestedUrls.filter((url) => url.startsWith("/api/hearts"));
+  assert.equal(new URL(firstAccountUrl, "http://x").searchParams.get("count"), "100");
+  assert.equal(new URL(heartsUrls[0], "http://x").searchParams.get("count"), "100");
+  assert.equal(
+    new URL(heartsUrls[1], "http://x").searchParams.get("application_id"),
+    "app-123",
+  );
 });
 
-test("stops paging rather than following a next link off the configured host", async (context) => {
+test("stops paging rather than replaying a next link that points off the configured host", async (context) => {
   const requestedUrls = [];
   const server = await startFakeHub(context, {
     onRequest(request, response) {
@@ -171,8 +188,12 @@ test("stops paging rather than following a next link off the configured host", a
       if (request.url.startsWith("/api/account/character_models")) {
         return json(response, 200, {
           data: [characterModel({ id: "own-1" })],
-          // A next link pointing somewhere else would leak the access token.
-          _links: { next: { href: "https://attacker.example/api/account/character_models" } },
+          // Following this would re-request a foreign URL's path from VRoid
+          // Hub; the token itself can't escape, since only the path and
+          // query are kept and they're resolved against baseUrl again.
+          _links: {
+            next: { href: "https://attacker.example/api/account/character_models?count=100" },
+          },
         });
       }
       if (request.url.startsWith("/api/hearts")) {
@@ -189,7 +210,10 @@ test("stops paging rather than following a next link off the configured host", a
   const characters = await client.listCharacters(TOKEN);
 
   assert.deepEqual(characters.map((character) => character.id), ["own-1"]);
-  assert.equal(requestedUrls.length, 2);
+  assert.equal(
+    requestedUrls.filter((url) => url.startsWith("/api/account/character_models")).length,
+    1,
+  );
 });
 
 test("caps paging so an API that always returns a next link can't loop forever", async (context) => {

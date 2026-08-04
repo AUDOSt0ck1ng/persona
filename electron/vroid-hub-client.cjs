@@ -89,6 +89,8 @@ function createVroidHubClient({
   baseUrl = DEFAULT_BASE_URL,
   fetchImpl = fetch,
 } = {}) {
+  const baseOrigin = new URL(baseUrl).origin;
+
   async function fetchJson(pathname, token) {
     const url = new URL(pathname, baseUrl);
     const response = await fetchImpl(url.toString(), {
@@ -108,9 +110,11 @@ function createVroidHubClient({
     const href = body?._links?.next?.href;
     if (typeof href !== "string" || href === "") return null;
     const next = new URL(href, new URL(currentPath, baseUrl));
-    // The access token rides along on every page request, so only ever
-    // follow a next link that stays on the host we were configured with.
-    if (next.origin !== new URL(baseUrl).origin) return null;
+    // Only the path and query survive — fetchJson re-resolves them against
+    // baseUrl, so a next link pointing at another host can never send the
+    // access token there. Stopping outright on one anyway keeps us from
+    // replaying a foreign URL's path against VRoid Hub.
+    if (next.origin !== baseOrigin) return null;
     return `${next.pathname}${next.search}`;
   }
 
