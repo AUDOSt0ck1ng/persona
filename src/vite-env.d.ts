@@ -187,7 +187,11 @@ type PersonaVroidHubCharacterLicense =
   | PersonaVroidHubCharacterLicenseV1;
 
 interface PersonaVroidHubCharacter {
+  // The character *model*'s id — what downloads and page links are keyed by.
   id: string;
+  // The id of the character the model belongs to, needed alongside `id` to
+  // address the model's page on hub.vroid.com. Null when VRoid Hub omitted it.
+  character_id: string | null;
   name: string;
   is_downloadable: boolean;
   portrait_url: string | null;
@@ -289,7 +293,10 @@ interface Window {
       characterId: string,
       characterName: string,
     ): Promise<PersonaSettingsSnapshot>;
-    openCharacterPage(characterId: string): Promise<void>;
+    openCharacterPage(
+      characterId: string,
+      characterModelId: string,
+    ): Promise<void>;
     subscribe(
       listener: (status: PersonaVroidHubStatus) => void,
     ): () => void;

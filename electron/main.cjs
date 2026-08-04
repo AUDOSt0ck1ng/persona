@@ -1196,18 +1196,24 @@ if (!app.requestSingleInstanceLock()) {
         );
       },
     );
-    // Builds the character's Hub page from a bare id rather than trusting a
-    // full URL from the renderer, so this can only ever open
-    // hub.vroid.com/characters/<id>.
+    // Builds the model's Hub page from bare ids rather than trusting a full
+    // URL from the renderer, so this can only ever open
+    // hub.vroid.com/characters/<character id>/models/<model id>. Both ids are
+    // needed: a model lives under the character that owns it, and the model id
+    // alone addresses nothing.
     ipcMain.handle(
       "persona:vroid-open-character-page",
-      (event, characterId) => {
+      (event, characterId, characterModelId) => {
         requireSettingsSender(event);
         if (typeof characterId !== "string" || characterId === "") {
           throw new Error("A character id is required.");
         }
+        if (typeof characterModelId !== "string" || characterModelId === "") {
+          throw new Error("A character model id is required.");
+        }
         void shell.openExternal(
-          `https://hub.vroid.com/characters/${encodeURIComponent(characterId)}`,
+          `https://hub.vroid.com/characters/${encodeURIComponent(characterId)}` +
+            `/models/${encodeURIComponent(characterModelId)}`,
         );
       },
     );

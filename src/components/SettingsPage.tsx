@@ -119,7 +119,7 @@ function VroidCharacterPortrait({
 
 function vroidConditionsOfUse(
   character: PersonaVroidHubCharacter,
-  onOpenHubPage: () => void,
+  onOpenHubPage: (() => void) | null,
 ): ReactNode {
   const rows = vroidLicenseRows(character.license);
 
@@ -145,15 +145,20 @@ function vroidConditionsOfUse(
           VRoid Hub.
         </p>
       )}
-      <p>
-        <button
-          className="link-button"
-          onClick={onOpenHubPage}
-          type="button"
-        >
-          View {character.name} on VRoid Hub
-        </button>
-      </p>
+      {/* Only offered when VRoid Hub gave us the owning character's id: the
+          model's page lives under it, so without it there's no address to
+          open and a link would only lead to a 404. */}
+      {onOpenHubPage && (
+        <p>
+          <button
+            className="link-button"
+            onClick={onOpenHubPage}
+            type="button"
+          >
+            View {character.name} on VRoid Hub
+          </button>
+        </p>
+      )}
     </>
   );
 }
@@ -898,11 +903,19 @@ export function SettingsPage() {
     }
     // VRoid Hub's third-party integration guidelines require a conditions-
     // of-use confirmation before a hearted (not-owned) model is used.
+    const owningCharacterId = character.character_id;
     openConfirmation({
       confirmLabel: 'Use this character',
       title: 'Model Data Conditions of Use',
-      detail: vroidConditionsOfUse(character, () =>
-        void vroidHubBridge.openCharacterPage(character.id),
+      detail: vroidConditionsOfUse(
+        character,
+        owningCharacterId == null
+          ? null
+          : () =>
+              void vroidHubBridge.openCharacterPage(
+                owningCharacterId,
+                character.id,
+              ),
       ),
       onConfirm: () => activateVroidCharacter(character),
     });

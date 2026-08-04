@@ -104,6 +104,14 @@ function toCharacterSummary(model, origin) {
         ? model.name
         : "Untitled character",
     is_downloadable: Boolean(model.is_downloadable),
+    // The character a model belongs to is a separate resource with its own
+    // id (CharacterSerializer), and hub.vroid.com pages a model under it:
+    // /characters/<character id>/models/<character model id>. Without this,
+    // there's no way to build a link to the model that resolves.
+    character_id:
+      typeof model.character?.id === "string" && model.character.id !== ""
+        ? model.character.id
+        : null,
     portrait_url: portraitUrl(model),
     origin,
     license: characterLicense(model),

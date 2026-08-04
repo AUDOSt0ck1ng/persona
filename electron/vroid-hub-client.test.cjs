@@ -44,7 +44,10 @@ function characterModel(overrides = {}) {
     name: "My Character",
     is_downloadable: false,
     is_other_users_available: true,
-    portrait_image: { q75: { url: "https://hub.vroid.com/portrait.png" } },
+    // A model is nested under the character that owns it, and the two have
+    // separate ids — model pages are addressed by both.
+    character: { id: "character-1" },
+    portrait_image: { sq300: { url: "https://images.vroid.com/portrait.png" } },
     ...overrides,
   };
 }
@@ -372,6 +375,36 @@ test("rejects a redirect response with no Location header", async (context) => {
   await assert.rejects(
     () => client.loadCharacterModel(TOKEN, "model-1"),
     /download URL/i,
+  );
+});
+
+test("carries the owning character's id, which a model's Hub page is addressed by", async (context) => {
+  const server = await startFakeHub(context, {
+    onRequest(request, response) {
+      if (request.url.startsWith("/api/account/character_models")) {
+        return json(response, 200, {
+          data: [
+            characterModel({ id: "model-1", character: { id: "character-9" } }),
+            // A model with no character block still lists; the picker just
+            // can't offer a link to it.
+            characterModel({ id: "model-2", character: undefined }),
+          ],
+        });
+      }
+      return json(response, 200, { data: [] });
+    },
+  });
+  const client = createVroidHubClient({
+    baseUrl: `http://127.0.0.1:${server.address().port}`,
+  });
+
+  const characters = await client.listCharacters(TOKEN);
+
+  assert.deepEqual(
+    Object.fromEntries(
+      characters.map((character) => [character.id, character.character_id]),
+    ),
+    { "model-1": "character-9", "model-2": null },
   );
 });
 
