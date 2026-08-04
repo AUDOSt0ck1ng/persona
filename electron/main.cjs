@@ -34,7 +34,10 @@ const {
   MIN_AVATAR_WINDOW_HEIGHT,
 } = require("./settings-store.cjs");
 const { createVroidHubAuth } = require("./vroid-hub-auth.cjs");
-const { createVroidHubClient } = require("./vroid-hub-client.cjs");
+const {
+  characterModelPageUrl,
+  createVroidHubClient,
+} = require("./vroid-hub-client.cjs");
 const {
   clearVroidHubCredentials,
   readVroidHubCredentials,
@@ -1158,6 +1161,21 @@ if (!app.requestSingleInstanceLock()) {
       const token = await vroidHubAuth.getValidAccessToken();
       return vroidHubClient.listCharacters(token);
     });
+    // Portraits load one card at a time after the list renders, so a slow or
+    // unreachable image CDN delays a thumbnail rather than the whole picker.
+    // Only ids from the last listing resolve to a URL (see the client), and a
+    // missing portrait is a null, not an error — the card just keeps its
+    // placeholder icon.
+    ipcMain.handle(
+      "persona:vroid-character-portrait",
+      async (event, characterId) => {
+        requireSettingsSender(event);
+        if (typeof characterId !== "string" || characterId === "") {
+          throw new Error("A character id is required.");
+        }
+        return (await vroidHubClient?.loadCharacterPortrait(characterId)) ?? null;
+      },
+    );
     ipcMain.handle(
       "persona:vroid-select-character",
       async (event, characterId, characterName) => {
@@ -1181,18 +1199,15 @@ if (!app.requestSingleInstanceLock()) {
         );
       },
     );
-    // Builds the character's Hub page from a bare id rather than trusting a
-    // full URL from the renderer, so this can only ever open
-    // hub.vroid.com/characters/<id>.
+    // Builds the model's Hub page from bare ids rather than trusting a full
+    // URL from the renderer. characterModelPageUrl validates both ids and
+    // owns the path's shape, where it can be tested — this handler can't.
     ipcMain.handle(
       "persona:vroid-open-character-page",
-      (event, characterId) => {
+      (event, characterId, characterModelId) => {
         requireSettingsSender(event);
-        if (typeof characterId !== "string" || characterId === "") {
-          throw new Error("A character id is required.");
-        }
         void shell.openExternal(
-          `https://hub.vroid.com/characters/${encodeURIComponent(characterId)}`,
+          characterModelPageUrl(characterId, characterModelId),
         );
       },
     );

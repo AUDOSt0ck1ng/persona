@@ -61,9 +61,97 @@ interface ConfirmationRequest {
   title: string;
 }
 
+// Portraits arrive from the main process as data: URLs, one request per card,
+// and stay cached: they're immutable enough that re-downloading them on every
+// "Refresh list" would only cost time. Module scope rather than component
+// state so the cache survives leaving and re-entering the Models section.
+const vroidPortraitCache = new Map<string, string | null>();
+// In-flight requests, so the same model is only ever fetched once at a time.
+// Without this, StrictMode's double-mounted effects in development — and any
+// future card that repeats a model — would each open their own request.
+const vroidPortraitRequests = new Map<string, Promise<string | null>>();
+
+function requestVroidPortrait(
+  bridge: NonNullable<Window['personaVroidHub']>,
+  characterId: string,
+): Promise<string | null> {
+  const pending = vroidPortraitRequests.get(characterId);
+  if (pending) return pending;
+  const request = bridge
+    .getCharacterPortrait(characterId)
+    // A portrait that won't load is cosmetic, so a failure settles the card on
+    // its placeholder rather than surfacing an error. The miss is remembered
+    // only until the next "Refresh list", which clears misses so a transient
+    // failure — or a portrait the main process hadn't listed yet — isn't
+    // remembered for the window's lifetime.
+    .catch(() => null)
+    .then((dataUrl) => {
+      vroidPortraitCache.set(characterId, dataUrl);
+      return dataUrl;
+    })
+    .finally(() => vroidPortraitRequests.delete(characterId));
+  vroidPortraitRequests.set(characterId, request);
+  return request;
+}
+
+// Drops remembered misses while keeping portraits that already loaded, so a
+// refresh is also the user's "try again" for cards stuck on the placeholder.
+// Deleting during iteration is well defined for a Map.
+function forgetMissingVroidPortraits() {
+  for (const [characterId, portrait] of vroidPortraitCache) {
+    if (portrait == null) vroidPortraitCache.delete(characterId);
+  }
+}
+
+function VroidCharacterPortrait({
+  character,
+}: {
+  character: PersonaVroidHubCharacter;
+}) {
+  const [portrait, setPortrait] = useState<string | null>(
+    () => vroidPortraitCache.get(character.id) ?? null,
+  );
+
+  useEffect(() => {
+    const bridge = window.personaVroidHub;
+    // No portrait_url means VRoid Hub has no image for this model, so there's
+    // nothing to ask the main process for.
+    if (!bridge || character.portrait_url == null) {
+      setPortrait(null);
+      return;
+    }
+    if (vroidPortraitCache.has(character.id)) {
+      setPortrait(vroidPortraitCache.get(character.id) ?? null);
+      return;
+    }
+    let cancelled = false;
+    void requestVroidPortrait(bridge, character.id).then((dataUrl) => {
+      if (!cancelled) setPortrait(dataUrl);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [character.id, character.portrait_url]);
+
+  if (portrait == null) {
+    return (
+      <span aria-hidden="true" className="asset-portrait asset-portrait-empty">
+        VRM
+      </span>
+    );
+  }
+  return (
+    <img
+      alt={`${character.name} portrait`}
+      className="asset-portrait"
+      src={portrait}
+    />
+  );
+}
+
 function vroidConditionsOfUse(
   character: PersonaVroidHubCharacter,
-  onOpenHubPage: () => void,
+  onOpenHubPage: (() => void) | null,
 ): ReactNode {
   const rows = vroidLicenseRows(character.license);
 
@@ -89,15 +177,20 @@ function vroidConditionsOfUse(
           VRoid Hub.
         </p>
       )}
-      <p>
-        <button
-          className="link-button"
-          onClick={onOpenHubPage}
-          type="button"
-        >
-          View {character.name} on VRoid Hub
-        </button>
-      </p>
+      {/* Only offered when VRoid Hub gave us the owning character's id: the
+          model's page lives under it, so without it there's no address to
+          open and a link would only lead to a 404. */}
+      {onOpenHubPage && (
+        <p>
+          <button
+            className="link-button"
+            onClick={onOpenHubPage}
+            type="button"
+          >
+            View {character.name} on VRoid Hub
+          </button>
+        </p>
+      )}
     </>
   );
 }
@@ -355,6 +448,9 @@ export function SettingsPage() {
     PersonaVroidHubCharacter[] | null
   >(null);
   const [vroidLoading, setVroidLoading] = useState(false);
+  // Remounts the portrait of every card when it changes — see
+  // refreshVroidCharacters.
+  const [vroidPortraitEpoch, setVroidPortraitEpoch] = useState(0);
   const confirmationDialogRef = useRef<HTMLDivElement>(null);
   const confirmationCancelRef = useRef<HTMLButtonElement>(null);
   const confirmationConfirmRef = useRef<HTMLButtonElement>(null);
@@ -401,6 +497,11 @@ export function SettingsPage() {
   const refreshVroidCharacters = useCallback(async () => {
     if (!vroidHubBridge) return;
     setVroidLoading(true);
+    forgetMissingVroidPortraits();
+    // Bumped so every card's portrait effect runs again against the freshened
+    // cache; the character ids a refresh returns are usually identical, which
+    // on its own would leave the effects — and any stuck placeholder — alone.
+    setVroidPortraitEpoch((epoch) => epoch + 1);
     try {
       setVroidCharacters(await vroidHubBridge.listCharacters());
     } catch (error) {
@@ -842,11 +943,19 @@ export function SettingsPage() {
     }
     // VRoid Hub's third-party integration guidelines require a conditions-
     // of-use confirmation before a hearted (not-owned) model is used.
+    const owningCharacterId = character.character_id;
     openConfirmation({
       confirmLabel: 'Use this character',
       title: 'Model Data Conditions of Use',
-      detail: vroidConditionsOfUse(character, () =>
-        void vroidHubBridge.openCharacterPage(character.id),
+      detail: vroidConditionsOfUse(
+        character,
+        owningCharacterId == null
+          ? null
+          : () =>
+              void vroidHubBridge.openCharacterPage(
+                owningCharacterId,
+                character.id,
+              ),
       ),
       onConfirm: () => activateVroidCharacter(character),
     });
@@ -1603,8 +1712,11 @@ export function SettingsPage() {
                       )}
                       {vroidCharacters?.map((character) => (
                         <article className="asset-card" key={character.id}>
+                          <VroidCharacterPortrait
+                            character={character}
+                            key={vroidPortraitEpoch}
+                          />
                           <span className="asset-card-main">
-                            <span className="asset-icon">VRM</span>
                             <span>
                               <strong>{character.name}</strong>
                               <small>

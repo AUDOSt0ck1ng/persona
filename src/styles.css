@@ -1002,6 +1002,31 @@ button {
   background: var(--accent-soft);
 }
 
+/* VRoid Hub cards lead with the character's portrait: models are often left
+   unnamed on Hub, so the picture is the only thing that tells them apart. */
+.asset-portrait {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  aspect-ratio: 4 / 3;
+  border-bottom: 1px solid var(--border);
+  background: var(--fill-subtle);
+  object-fit: cover;
+  /* Hub portraits frame the character centred with headroom above, so bias
+     the crop upwards to keep the face in a box wider than it is tall. */
+  object-position: center 20%;
+}
+
+.asset-portrait-empty {
+  display: grid;
+  place-items: center;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
 .asset-card-footer {
   display: flex;
   align-items: center;
@@ -2545,12 +2570,21 @@ button {
   margin-top: 0;
 }
 
+/* One term per line. The two-column grid goes on each row rather than the
+   list, because every dt/dd pair is wrapped in a div — put it on the <dl> and
+   those wrappers become the cells, pairing terms two-to-a-line instead. */
 .vroid-license-terms {
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 4px 12px;
+  gap: 4px;
   margin: 10px 0 0;
   font-size: var(--fs-sm);
+}
+
+.vroid-license-terms > div {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+  gap: 12px;
 }
 
 .vroid-license-terms dt {
@@ -2558,8 +2592,11 @@ button {
 }
 
 .vroid-license-terms dd {
+  min-width: 0;
   margin: 0;
   color: var(--text-primary);
+  /* Values share the right edge so "Allow"/"Do not allow" read as one column
+     no matter how long the term next to them is. */
   text-align: right;
 }
 
