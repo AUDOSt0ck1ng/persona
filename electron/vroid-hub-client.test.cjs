@@ -3,7 +3,10 @@
 const assert = require("node:assert/strict");
 const http = require("node:http");
 const test = require("node:test");
-const { createVroidHubClient } = require("./vroid-hub-client.cjs");
+const {
+  characterModelPageUrl,
+  createVroidHubClient,
+} = require("./vroid-hub-client.cjs");
 
 const TOKEN = { accessToken: "access-1", tokenType: "Bearer" };
 
@@ -462,12 +465,143 @@ test("returns no portrait for an id the last listing never handed out", async ()
   assert.equal(await client.loadCharacterPortrait("never-listed"), null);
 });
 
-test("ignores a portrait response that isn't an image", async (context) => {
+test("ignores a portrait response that isn't a displayable image", async (context) => {
+  const server = await startFakeHub(context, {
+    onRequest(request, response) {
+      if (request.url === "/markup.png") {
+        response.writeHead(200, { "content-type": "text/html" });
+        return response.end("<script>nope</script>");
+      }
+      // SVG matches `image/*` but buys nothing as a portrait, so it's not on
+      // the allowlist either.
+      if (request.url === "/vector.png") {
+        response.writeHead(200, { "content-type": "image/svg+xml" });
+        return response.end("<svg xmlns='http://www.w3.org/2000/svg'/>");
+      }
+      if (request.url.startsWith("/api/account/character_models")) {
+        return json(response, 200, {
+          data: [
+            characterModel({
+              id: "markup",
+              portrait_image: { sq300: { url: "/markup.png" } },
+            }),
+            characterModel({
+              id: "vector",
+              portrait_image: { sq300: { url: "/vector.png" } },
+            }),
+          ],
+        });
+      }
+      return json(response, 200, { data: [] });
+    },
+  });
+  const client = createVroidHubClient({
+    baseUrl: `http://127.0.0.1:${server.address().port}`,
+  });
+
+  await client.listCharacters(TOKEN);
+
+  assert.equal(await client.loadCharacterPortrait("markup"), null);
+  assert.equal(await client.loadCharacterPortrait("vector"), null);
+});
+
+test("addresses a model's Hub page by both the character and model id", () => {
+  // The model id alone resolves to nothing — /characters/<model id> is a 404.
+  assert.equal(
+    characterModelPageUrl("character-9", "model-1"),
+    "https://hub.vroid.com/characters/character-9/models/model-1",
+  );
+});
+
+test("keeps a hostile id inside the model page path", () => {
+  assert.equal(
+    characterModelPageUrl("../../evil", "a b/c?d#e"),
+    "https://hub.vroid.com/characters/..%2F..%2Fevil/models/a%20b%2Fc%3Fd%23e",
+  );
+});
+
+test("refuses to build a model page URL from a missing id", () => {
+  assert.throws(
+    () => characterModelPageUrl("", "model-1"),
+    /character id is required/i,
+  );
+  assert.throws(
+    () => characterModelPageUrl("character-9", ""),
+    /character model id is required/i,
+  );
+  assert.throws(
+    () => characterModelPageUrl("character-9", undefined),
+    /character model id is required/i,
+  );
+});
+
+test("holds portrait downloads to a fixed number of concurrent requests", async (context) => {
+  const modelCount = 20;
+  let inFlight = 0;
+  let peakInFlight = 0;
+  const release = [];
+  const server = await startFakeHub(context, {
+    onRequest(request, response) {
+      if (request.url.startsWith("/portrait-")) {
+        inFlight += 1;
+        peakInFlight = Math.max(peakInFlight, inFlight);
+        // Held open until every request that's going to arrive has, so the
+        // peak reflects the client's ceiling and not the server's speed.
+        release.push(() => {
+          inFlight -= 1;
+          response.writeHead(200, { "content-type": "image/png" });
+          response.end(Buffer.from([0x89, 0x50]));
+        });
+        return;
+      }
+      if (request.url.startsWith("/api/account/character_models")) {
+        return json(response, 200, {
+          data: Array.from({ length: modelCount }, (_unused, index) =>
+            characterModel({
+              id: `model-${index}`,
+              portrait_image: { sq300: { url: `/portrait-${index}.png` } },
+            }),
+          ),
+        });
+      }
+      return json(response, 200, { data: [] });
+    },
+  });
+  const client = createVroidHubClient({
+    baseUrl: `http://127.0.0.1:${server.address().port}`,
+  });
+  const characters = await client.listCharacters(TOKEN);
+
+  let done = false;
+  const portraits = Promise.all(
+    characters.map((character) => client.loadCharacterPortrait(character.id)),
+  ).then((results) => {
+    done = true;
+    return results;
+  });
+  // Drained one at a time: each release frees a slot, and the set only ever
+  // finishes if the client hands that slot to a queued request.
+  while (!done) {
+    release.shift()?.();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+
+  assert.equal((await portraits).length, modelCount);
+  assert.ok(
+    peakInFlight <= 6,
+    `expected at most 6 concurrent portrait requests, saw ${peakInFlight}`,
+  );
+});
+
+test("ignores an oversized portrait without buffering it", async (context) => {
   const server = await startFakeHub(context, {
     onRequest(request, response) {
       if (request.url === "/portrait.png") {
-        response.writeHead(200, { "content-type": "text/html" });
-        return response.end("<script>nope</script>");
+        response.writeHead(200, {
+          "content-type": "image/png",
+          "content-length": String(64 * 1024 * 1024),
+        });
+        return response.end(Buffer.alloc(8));
       }
       if (request.url.startsWith("/api/account/character_models")) {
         return json(response, 200, {

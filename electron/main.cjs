@@ -34,7 +34,10 @@ const {
   MIN_AVATAR_WINDOW_HEIGHT,
 } = require("./settings-store.cjs");
 const { createVroidHubAuth } = require("./vroid-hub-auth.cjs");
-const { createVroidHubClient } = require("./vroid-hub-client.cjs");
+const {
+  characterModelPageUrl,
+  createVroidHubClient,
+} = require("./vroid-hub-client.cjs");
 const {
   clearVroidHubCredentials,
   readVroidHubCredentials,
@@ -1197,23 +1200,14 @@ if (!app.requestSingleInstanceLock()) {
       },
     );
     // Builds the model's Hub page from bare ids rather than trusting a full
-    // URL from the renderer, so this can only ever open
-    // hub.vroid.com/characters/<character id>/models/<model id>. Both ids are
-    // needed: a model lives under the character that owns it, and the model id
-    // alone addresses nothing.
+    // URL from the renderer. characterModelPageUrl validates both ids and
+    // owns the path's shape, where it can be tested — this handler can't.
     ipcMain.handle(
       "persona:vroid-open-character-page",
       (event, characterId, characterModelId) => {
         requireSettingsSender(event);
-        if (typeof characterId !== "string" || characterId === "") {
-          throw new Error("A character id is required.");
-        }
-        if (typeof characterModelId !== "string" || characterModelId === "") {
-          throw new Error("A character model id is required.");
-        }
         void shell.openExternal(
-          `https://hub.vroid.com/characters/${encodeURIComponent(characterId)}` +
-            `/models/${encodeURIComponent(characterModelId)}`,
+          characterModelPageUrl(characterId, characterModelId),
         );
       },
     );

@@ -12,17 +12,54 @@ const PAGE_SIZE = 100;
 const MAX_PAGES = 20;
 const API_REQUEST_TIMEOUT_MS = 15 * 1000;
 // A portrait is a small JPEG/PNG on VRoid Hub's image CDN rather than its API,
-// so it gets its own budget: generous enough for `original` on a slow link,
-// tight enough that one wedged image can't stall the picker.
+// so it gets its own budget: generous on a slow link, tight enough that one
+// wedged image can't stall the picker.
 const PORTRAIT_TIMEOUT_MS = 20 * 1000;
-// The variants below are a few hundred pixels wide; anything this far past
-// that is not a thumbnail, and inlining it as a data: URL would bloat the
-// renderer for no visible gain.
-const MAX_PORTRAIT_BYTES = 8 * 1024 * 1024;
+// The variants below are a few hundred pixels wide, so a couple of megabytes
+// clears any real one by a wide margin while still refusing a full-size
+// render: a portrait is inlined as base64, which costs the renderer another
+// third again on top of this.
+const MAX_PORTRAIT_BYTES = 2 * 1024 * 1024;
+// Portraits are what an <img> can actually display; SVG in particular buys
+// nothing here, so it isn't accepted just for matching `image/*`.
+const PORTRAIT_CONTENT_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+]);
+// Every visible card asks for its portrait at once, so without a ceiling a
+// large library would open hundreds of simultaneous connections to one host —
+// the shape that earns throttling, and Node's fetch applies no per-origin cap
+// of its own the way a browser does. Six keeps the grid filling quickly
+// without the burst.
+const MAX_CONCURRENT_PORTRAITS = 6;
 // The actual VRM binary can be up to MAX_ASSET_BYTES (200 MB, enforced in
 // settings-store.cjs) and is fetched from a presigned storage URL, not
 // hub.vroid.com's own API, so it gets a longer allowance than the JSON calls.
 const DOWNLOAD_TIMEOUT_MS = 120 * 1000;
+
+/**
+ * The public hub.vroid.com page for one character model.
+ *
+ * A model is nested under the character that owns it, and the two are
+ * separate resources with separate ids: /characters/<character id> alone is
+ * the character's page, and a model id in that position resolves to nothing.
+ * Both ids are percent-encoded into a fixed path so a caller can never widen
+ * this past a model page on hub.vroid.com.
+ */
+function characterModelPageUrl(characterId, characterModelId) {
+  if (typeof characterId !== "string" || characterId === "") {
+    throw new Error("A character id is required.");
+  }
+  if (typeof characterModelId !== "string" || characterModelId === "") {
+    throw new Error("A character model id is required.");
+  }
+  return (
+    `${DEFAULT_BASE_URL}/characters/${encodeURIComponent(characterId)}` +
+    `/models/${encodeURIComponent(characterModelId)}`
+  );
+}
 
 function authorizedHeaders({ accessToken, tokenType = "Bearer" } = {}, extra = {}) {
   if (typeof accessToken !== "string" || accessToken === "") {
@@ -138,6 +175,24 @@ function createVroidHubClient({
   // arbitrary URLs — only addresses VRoid Hub itself just handed us are
   // reachable. Rebuilt (not merged) per listing so it can't grow unbounded.
   const portraitUrlsById = new Map();
+  let activePortraitFetches = 0;
+  const waitingPortraitFetches = [];
+
+  function acquirePortraitSlot() {
+    if (activePortraitFetches < MAX_CONCURRENT_PORTRAITS) {
+      activePortraitFetches += 1;
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => waitingPortraitFetches.push(resolve));
+  }
+
+  function releasePortraitSlot() {
+    const next = waitingPortraitFetches.shift();
+    // The slot is handed straight to the next waiter, so the active count is
+    // only decremented once nobody is queued behind it.
+    if (next) next();
+    else activePortraitFetches -= 1;
+  }
 
   async function fetchJson(pathname, token) {
     const url = new URL(pathname, baseUrl);
@@ -244,27 +299,35 @@ function createVroidHubClient({
       return null;
     }
     if (url.protocol !== "https:" && url.protocol !== "http:") return null;
-    // Portraits are public CDN objects: sending the account's access token to
-    // whatever host VRoid Hub named would leak it off hub.vroid.com, so this
-    // request deliberately carries no Authorization header.
-    const response = await fetchImpl(url.toString(), {
-      signal: AbortSignal.timeout(PORTRAIT_TIMEOUT_MS),
-    });
-    if (!response.ok) return null;
-    const contentType = (response.headers.get("content-type") ?? "")
-      .split(";")[0]
-      .trim()
-      .toLowerCase();
-    if (!contentType.startsWith("image/")) return null;
-    const declaredLength = Number(response.headers.get("content-length"));
-    if (Number.isFinite(declaredLength) && declaredLength > MAX_PORTRAIT_BYTES) {
-      return null;
+    await acquirePortraitSlot();
+    try {
+      // Portraits are public CDN objects: sending the account's access token
+      // to whatever host VRoid Hub named would leak it off hub.vroid.com, so
+      // this request deliberately carries no Authorization header.
+      const response = await fetchImpl(url.toString(), {
+        signal: AbortSignal.timeout(PORTRAIT_TIMEOUT_MS),
+      });
+      if (!response.ok) return null;
+      const contentType = (response.headers.get("content-type") ?? "")
+        .split(";")[0]
+        .trim()
+        .toLowerCase();
+      if (!PORTRAIT_CONTENT_TYPES.has(contentType)) return null;
+      const declaredLength = Number(response.headers.get("content-length"));
+      if (
+        Number.isFinite(declaredLength) &&
+        declaredLength > MAX_PORTRAIT_BYTES
+      ) {
+        return null;
+      }
+      const bytes = Buffer.from(await response.arrayBuffer());
+      // Re-checked against the body itself: content-length is optional, and a
+      // chunked response can be any size regardless of the header's claim.
+      if (bytes.byteLength > MAX_PORTRAIT_BYTES) return null;
+      return `data:${contentType};base64,${bytes.toString("base64")}`;
+    } finally {
+      releasePortraitSlot();
     }
-    const bytes = Buffer.from(await response.arrayBuffer());
-    // Re-checked against the body itself: content-length is optional, and a
-    // chunked response can be any size regardless of what the header claimed.
-    if (bytes.byteLength > MAX_PORTRAIT_BYTES) return null;
-    return `data:${contentType};base64,${bytes.toString("base64")}`;
   }
 
   async function loadCharacterModel(token, characterId) {
@@ -323,5 +386,6 @@ function createVroidHubClient({
 
 module.exports = {
   DEFAULT_BASE_URL,
+  characterModelPageUrl,
   createVroidHubClient,
 };
