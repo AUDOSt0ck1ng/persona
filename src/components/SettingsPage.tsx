@@ -61,6 +61,62 @@ interface ConfirmationRequest {
   title: string;
 }
 
+// Portraits arrive from the main process as data: URLs, one request per card,
+// and stay cached for the window's lifetime: they're immutable enough that
+// re-downloading them on every "Refresh list" would only cost time. Module
+// scope rather than component state so the cache survives leaving and
+// re-entering the Models section.
+const vroidPortraitCache = new Map<string, string | null>();
+
+function VroidCharacterPortrait({
+  character,
+}: {
+  character: PersonaVroidHubCharacter;
+}) {
+  const [portrait, setPortrait] = useState<string | null>(
+    () => vroidPortraitCache.get(character.id) ?? null,
+  );
+
+  useEffect(() => {
+    const bridge = window.personaVroidHub;
+    // No portrait_url means VRoid Hub has no image for this model, so there's
+    // nothing to ask the main process for.
+    if (!bridge || character.portrait_url == null) return;
+    if (vroidPortraitCache.has(character.id)) {
+      setPortrait(vroidPortraitCache.get(character.id) ?? null);
+      return;
+    }
+    let cancelled = false;
+    void bridge
+      .getCharacterPortrait(character.id)
+      // A portrait that won't load is cosmetic: cache the miss so the card
+      // settles on its placeholder instead of retrying on every render.
+      .catch(() => null)
+      .then((dataUrl) => {
+        vroidPortraitCache.set(character.id, dataUrl);
+        if (!cancelled) setPortrait(dataUrl);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [character.id, character.portrait_url]);
+
+  if (portrait == null) {
+    return (
+      <span aria-hidden="true" className="asset-portrait asset-portrait-empty">
+        VRM
+      </span>
+    );
+  }
+  return (
+    <img
+      alt={`${character.name} portrait`}
+      className="asset-portrait"
+      src={portrait}
+    />
+  );
+}
+
 function vroidConditionsOfUse(
   character: PersonaVroidHubCharacter,
   onOpenHubPage: () => void,
@@ -1603,8 +1659,8 @@ export function SettingsPage() {
                       )}
                       {vroidCharacters?.map((character) => (
                         <article className="asset-card" key={character.id}>
+                          <VroidCharacterPortrait character={character} />
                           <span className="asset-card-main">
-                            <span className="asset-icon">VRM</span>
                             <span>
                               <strong>{character.name}</strong>
                               <small>

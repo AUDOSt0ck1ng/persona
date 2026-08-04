@@ -101,6 +101,8 @@ contextBridge.exposeInMainWorld("personaVroidHub", {
   connect: () => ipcRenderer.invoke("persona:vroid-connect"),
   disconnect: () => ipcRenderer.invoke("persona:vroid-disconnect"),
   listCharacters: () => ipcRenderer.invoke("persona:vroid-list-characters"),
+  getCharacterPortrait: (characterId) =>
+    ipcRenderer.invoke("persona:vroid-character-portrait", characterId),
   selectCharacter: (characterId, characterName) =>
     ipcRenderer.invoke(
       "persona:vroid-select-character",

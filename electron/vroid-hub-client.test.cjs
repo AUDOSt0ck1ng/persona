@@ -375,6 +375,89 @@ test("rejects a redirect response with no Location header", async (context) => {
   );
 });
 
+test("inlines a listed character's portrait as a data URL without sending the token", async (context) => {
+  const portraitBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x01, 0x02]);
+  let portraitHeaders = null;
+  const server = await startFakeHub(context, {
+    onRequest(request, response) {
+      if (request.url === "/portrait-sq300.png") {
+        portraitHeaders = request.headers;
+        response.writeHead(200, { "content-type": "image/png" });
+        return response.end(portraitBytes);
+      }
+      if (request.url.startsWith("/api/account/character_models")) {
+        return json(response, 200, {
+          data: [
+            characterModel({
+              id: "own-1",
+              portrait_image: {
+                // Ordered worst-first to prove the small square crop wins:
+                // `original` on VRoid Hub can be a multi-megabyte render.
+                original: { url: "/portrait-original.png" },
+                sq300: { url: "/portrait-sq300.png" },
+              },
+            }),
+          ],
+        });
+      }
+      return json(response, 200, { data: [] });
+    },
+  });
+  const client = createVroidHubClient({
+    baseUrl: `http://127.0.0.1:${server.address().port}`,
+  });
+
+  const [character] = await client.listCharacters(TOKEN);
+  assert.match(character.portrait_url, /portrait-sq300\.png$/);
+
+  const dataUrl = await client.loadCharacterPortrait("own-1");
+
+  assert.equal(
+    dataUrl,
+    `data:image/png;base64,${portraitBytes.toString("base64")}`,
+  );
+  // The image CDN is a different host from the API, so the access token must
+  // not ride along with the portrait request.
+  assert.equal(portraitHeaders.authorization, undefined);
+});
+
+test("returns no portrait for an id the last listing never handed out", async () => {
+  const client = createVroidHubClient({ baseUrl: "http://127.0.0.1:1" });
+
+  // Nothing is fetched at all: an unlisted id has no URL, which is what keeps
+  // the renderer from steering main-process requests anywhere it likes.
+  assert.equal(await client.loadCharacterPortrait("never-listed"), null);
+});
+
+test("ignores a portrait response that isn't an image", async (context) => {
+  const server = await startFakeHub(context, {
+    onRequest(request, response) {
+      if (request.url === "/portrait.png") {
+        response.writeHead(200, { "content-type": "text/html" });
+        return response.end("<script>nope</script>");
+      }
+      if (request.url.startsWith("/api/account/character_models")) {
+        return json(response, 200, {
+          data: [
+            characterModel({
+              id: "own-1",
+              portrait_image: { sq300: { url: "/portrait.png" } },
+            }),
+          ],
+        });
+      }
+      return json(response, 200, { data: [] });
+    },
+  });
+  const client = createVroidHubClient({
+    baseUrl: `http://127.0.0.1:${server.address().port}`,
+  });
+
+  await client.listCharacters(TOKEN);
+
+  assert.equal(await client.loadCharacterPortrait("own-1"), null);
+});
+
 test("requires a character id", async () => {
   const client = createVroidHubClient({ baseUrl: "http://127.0.0.1:1" });
   await assert.rejects(

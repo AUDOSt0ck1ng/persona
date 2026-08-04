@@ -281,6 +281,10 @@ interface Window {
     connect(): Promise<PersonaVroidHubStatus>;
     disconnect(): Promise<PersonaVroidHubStatus>;
     listCharacters(): Promise<PersonaVroidHubCharacter[]>;
+    // Resolves to a data: URL for the character's portrait, or null when the
+    // model has none — the renderer's CSP forbids loading it from VRoid Hub's
+    // image CDN directly.
+    getCharacterPortrait(characterId: string): Promise<string | null>;
     selectCharacter(
       characterId: string,
       characterName: string,

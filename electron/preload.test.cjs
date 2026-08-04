@@ -109,6 +109,7 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
   await vroidHub.connect();
   await vroidHub.disconnect();
   await vroidHub.listCharacters();
+  await vroidHub.getCharacterPortrait("character-id");
   await vroidHub.selectCharacter("character-id", "Character Name");
   await vroidHub.openCharacterPage("character-id");
 
@@ -176,6 +177,7 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
     ["persona:vroid-connect"],
     ["persona:vroid-disconnect"],
     ["persona:vroid-list-characters"],
+    ["persona:vroid-character-portrait", "character-id"],
     ["persona:vroid-select-character", "character-id", "Character Name"],
     ["persona:vroid-open-character-page", "character-id"],
   ]);

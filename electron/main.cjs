@@ -1158,6 +1158,21 @@ if (!app.requestSingleInstanceLock()) {
       const token = await vroidHubAuth.getValidAccessToken();
       return vroidHubClient.listCharacters(token);
     });
+    // Portraits load one card at a time after the list renders, so a slow or
+    // unreachable image CDN delays a thumbnail rather than the whole picker.
+    // Only ids from the last listing resolve to a URL (see the client), and a
+    // missing portrait is a null, not an error — the card just keeps its
+    // placeholder icon.
+    ipcMain.handle(
+      "persona:vroid-character-portrait",
+      async (event, characterId) => {
+        requireSettingsSender(event);
+        if (typeof characterId !== "string" || characterId === "") {
+          throw new Error("A character id is required.");
+        }
+        return (await vroidHubClient?.loadCharacterPortrait(characterId)) ?? null;
+      },
+    );
     ipcMain.handle(
       "persona:vroid-select-character",
       async (event, characterId, characterName) => {
