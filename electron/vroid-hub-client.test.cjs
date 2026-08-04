@@ -104,6 +104,124 @@ test("lists the account's own models and eligible hearted models, filtering inel
   );
 });
 
+test("follows _links.next.href until exhausted so nothing past the first page is lost", async (context) => {
+  const requestedUrls = [];
+  const server = await startFakeHub(context, {
+    onRequest(request, response) {
+      requestedUrls.push(request.url);
+      const url = new URL(request.url, "http://x");
+      if (url.pathname === "/api/account/character_models") {
+        const page = url.searchParams.get("max_id") ?? "1";
+        // Page 2's link is absolute, page 3's is relative: VRoid Hub is only
+        // documented as returning "the next page's URL", so accept both.
+        if (page === "1") {
+          return json(response, 200, {
+            data: [characterModel({ id: "own-1" })],
+            _links: {
+              next: {
+                href: `http://127.0.0.1:${server.address().port}/api/account/character_models?count=100&max_id=2`,
+              },
+            },
+          });
+        }
+        if (page === "2") {
+          return json(response, 200, {
+            data: [characterModel({ id: "own-2" })],
+            _links: { next: { href: "/api/account/character_models?count=100&max_id=3" } },
+          });
+        }
+        // Last page: a full `data` array but no next link.
+        return json(response, 200, { data: [characterModel({ id: "own-3" })] });
+      }
+      if (url.pathname === "/api/hearts") {
+        if (url.searchParams.get("max_id") == null) {
+          return json(response, 200, {
+            data: [characterModel({ id: "hearted-1" })],
+            _links: { next: { href: "/api/hearts?count=100&max_id=2" } },
+          });
+        }
+        return json(response, 200, { data: [characterModel({ id: "hearted-2" })] });
+      }
+      response.writeHead(404);
+      response.end();
+    },
+  });
+  const client = createVroidHubClient({
+    applicationId: "app-123",
+    baseUrl: `http://127.0.0.1:${server.address().port}`,
+  });
+
+  const characters = await client.listCharacters(TOKEN);
+
+  assert.deepEqual(
+    characters.map((character) => character.id).sort(),
+    ["hearted-1", "hearted-2", "own-1", "own-2", "own-3"],
+  );
+  assert.equal(
+    requestedUrls.filter((url) => url.startsWith("/api/account/character_models")).length,
+    3,
+  );
+});
+
+test("stops paging rather than following a next link off the configured host", async (context) => {
+  const requestedUrls = [];
+  const server = await startFakeHub(context, {
+    onRequest(request, response) {
+      requestedUrls.push(request.url);
+      if (request.url.startsWith("/api/account/character_models")) {
+        return json(response, 200, {
+          data: [characterModel({ id: "own-1" })],
+          // A next link pointing somewhere else would leak the access token.
+          _links: { next: { href: "https://attacker.example/api/account/character_models" } },
+        });
+      }
+      if (request.url.startsWith("/api/hearts")) {
+        return json(response, 200, { data: [] });
+      }
+      response.writeHead(404);
+      response.end();
+    },
+  });
+  const client = createVroidHubClient({
+    baseUrl: `http://127.0.0.1:${server.address().port}`,
+  });
+
+  const characters = await client.listCharacters(TOKEN);
+
+  assert.deepEqual(characters.map((character) => character.id), ["own-1"]);
+  assert.equal(requestedUrls.length, 2);
+});
+
+test("caps paging so an API that always returns a next link can't loop forever", async (context) => {
+  let accountRequests = 0;
+  const server = await startFakeHub(context, {
+    onRequest(request, response) {
+      if (request.url.startsWith("/api/account/character_models")) {
+        accountRequests += 1;
+        return json(response, 200, {
+          data: [characterModel({ id: `own-${accountRequests}` })],
+          _links: {
+            next: { href: `/api/account/character_models?count=100&max_id=${accountRequests}` },
+          },
+        });
+      }
+      if (request.url.startsWith("/api/hearts")) {
+        return json(response, 200, { data: [] });
+      }
+      response.writeHead(404);
+      response.end();
+    },
+  });
+  const client = createVroidHubClient({
+    baseUrl: `http://127.0.0.1:${server.address().port}`,
+  });
+
+  const characters = await client.listCharacters(TOKEN);
+
+  assert.equal(accountRequests, 20);
+  assert.equal(characters.length, 20);
+});
+
 test("extracts VRM 0.0 and VRM 1.0 conditions of use in their own native shapes", async (context) => {
   const server = await startFakeHub(context, {
     onRequest(request, response) {

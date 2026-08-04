@@ -3,7 +3,13 @@
 const DEFAULT_BASE_URL = "https://hub.vroid.com";
 // VRoid Hub's own API version header, unrelated to this app's version.
 const API_VERSION = "11";
-const PAGE_SIZE = 12;
+// VRoid Hub caps `count` at 100 per page; ask for the maximum so a typical
+// library is one request and only unusually large ones need to page at all.
+const PAGE_SIZE = 100;
+// Paging follows `_links.next.href` until it's absent, so a misbehaving API
+// that always returns a next link would loop forever without this ceiling.
+// 20 pages of 100 is far past any real VRoid Hub library.
+const MAX_PAGES = 20;
 const API_REQUEST_TIMEOUT_MS = 15 * 1000;
 // The actual VRM binary can be up to MAX_ASSET_BYTES (200 MB, enforced in
 // settings-store.cjs) and is fetched from a presigned storage URL, not
@@ -95,23 +101,50 @@ function createVroidHubClient({
     return response.json();
   }
 
+  // VRoid Hub pages with an opaque cursor: each list response carries the
+  // next page's URL under `_links.next.href`, and its absence — not a short
+  // `data` array — is what marks the last page.
+  function nextPagePath(body, currentPath) {
+    const href = body?._links?.next?.href;
+    if (typeof href !== "string" || href === "") return null;
+    const next = new URL(href, new URL(currentPath, baseUrl));
+    // The access token rides along on every page request, so only ever
+    // follow a next link that stays on the host we were configured with.
+    if (next.origin !== new URL(baseUrl).origin) return null;
+    return `${next.pathname}${next.search}`;
+  }
+
+  // Walks every page of a list endpoint and returns the merged `data`
+  // entries. The character picker wants one complete array, and libraries
+  // are small enough that loading them up front beats a "load more" UI.
+  async function fetchAllPages(path, token) {
+    const items = [];
+    let currentPath = path;
+    for (let page = 0; page < MAX_PAGES && currentPath != null; page += 1) {
+      const body = await fetchJson(currentPath, token);
+      if (Array.isArray(body?.data)) items.push(...body.data);
+      currentPath = nextPagePath(body, currentPath);
+    }
+    return items;
+  }
+
   async function listCharacters(token) {
     // application_id scopes the hearts lookup to this registered app, as
     // VRoid Hub's API requires for the heart-scoped endpoints.
     const heartsQuery = new URLSearchParams({ count: String(PAGE_SIZE) });
     if (applicationId) heartsQuery.set("application_id", applicationId);
-    const [account, hearts] = await Promise.all([
-      fetchJson(`/api/account/character_models?count=${PAGE_SIZE}`, token),
-      fetchJson(`/api/hearts?${heartsQuery.toString()}`, token),
+    const [ownModels, hearts] = await Promise.all([
+      fetchAllPages(`/api/account/character_models?count=${PAGE_SIZE}`, token),
+      fetchAllPages(`/api/hearts?${heartsQuery.toString()}`, token),
     ]);
-    const ownModels = Array.isArray(account?.data) ? account.data : [];
     // Only the connected account unconditionally owns its own models; a
     // hearted model created by someone else must be explicitly marked
     // available to other users before Persona is allowed to use it, per
     // VRoid Hub's third-party integration rules. /api/hearts' data entries
     // are the character models themselves, not a heart record wrapping one.
-    const heartedModels = (Array.isArray(hearts?.data) ? hearts.data : [])
-      .filter((model) => model?.is_other_users_available === true);
+    const heartedModels = hearts.filter(
+      (model) => model?.is_other_users_available === true,
+    );
 
     const ownIds = new Set(
       ownModels
