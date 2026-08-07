@@ -98,6 +98,28 @@ chunk to begin at a more distant first keyframe.
 Compatibility work is lazy. Short output gaps remain inside Speaking and never
 rank or instantiate an unused Idle action.
 
+`src/drag-inertia.ts` gives the character secondary motion while the user is
+handling it. Orbiting moves the camera and Alt+drag moves the window, so
+neither displaces the character and its spring bones see no acceleration. The
+module turns both gestures into a transient lag that the existing three-vrm
+spring simulation answers, and both settle to exact rest, so a gesture never
+leaves the character moved or turned.
+
+The lag is a lean of the torso rather than a move of the model root, because a
+VRM spring may declare a `center` node and is then blind to any motion of that
+node. Both conventions in the wild cancel a root move outright, a center on
+the scene root and a center on the hips, while a rotation below them registers
+on any rig. The lean is written to the normalized humanoid rig, on top of the
+animated pose each frame and without accumulating, and is shared top heavy so
+that rigid props mounted on the chest are not flung about. A rotation cannot
+reproduce a vertical lag, so a purely up-and-down gesture leans less than a
+sideways one.
+
+Offsets are relative to the screen and mapped onto the camera basis. Azimuth
+is read against the orbit target rather than the model, so panning does not
+register as a rotation, and a sweep too large to be a hand gesture is
+discarded as a camera reposition.
+
 The persisted
 `speaking_transition.entry_ms` and `speaking_transition.exit_ms`
 settings hold inclusive `[minimum, maximum]` millisecond ranges for the
@@ -252,7 +274,8 @@ asset safety, and release checksums.
 Vitest covers animation priority and configured animation selection, speech
 signal gating, motion compatibility and variety, transition timing, async
 request replacement, pause debounce, Idle interim handling, one-shot actions,
-and scheduler cleanup. GitHub Actions then compiles and self-tests the native
+scheduler cleanup, and drag inertia including camera-jump rejection and
+return-to-rest. GitHub Actions then compiles and self-tests the native
 helper on its real operating system and builds the renderer on all three
 platforms.
 
