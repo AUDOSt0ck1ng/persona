@@ -109,11 +109,18 @@ The lag is a lean of the torso rather than a move of the model root, because a
 VRM spring may declare a `center` node and is then blind to any motion of that
 node. Both conventions in the wild cancel a root move outright, a center on
 the scene root and a center on the hips, while a rotation below them registers
-on any rig. The lean is written to the normalized humanoid rig, on top of the
-animated pose each frame and without accumulating, and is shared top heavy so
-that rigid props mounted on the chest are not flung about. A rotation cannot
-reproduce a vertical lag, so a purely up-and-down gesture leans less than a
-sideways one.
+on any rig. The lean is written to the normalized humanoid rig on top of the
+animated pose, and is shared top heavy so that rigid props mounted on the chest
+are not flung about. It is taken back off once `vrm.update` has copied it onto
+the render skeleton, because three-vrm never resets the normalized rig and a
+lean left in place is layered on again every frame a clip is not driving that
+joint. A rotation cannot reproduce a vertical lag, so a purely up-and-down
+gesture leans less than a sideways one.
+
+An orbit sweep answers with a sideways swing as well as a twist. The twist
+turns the body about a vertical axis through the spine, and the head the hair
+hangs off sits on that axis, so on its own it barely moves the spring roots at
+all however far it is turned up.
 
 Offsets are relative to the screen and mapped onto the camera basis. Azimuth
 is read against the orbit target rather than the model, so panning does not
@@ -274,10 +281,10 @@ asset safety, and release checksums.
 Vitest covers animation priority and configured animation selection, speech
 signal gating, motion compatibility and variety, transition timing, async
 request replacement, pause debounce, Idle interim handling, one-shot actions,
-scheduler cleanup, and drag inertia including camera-jump rejection and
-return-to-rest. GitHub Actions then compiles and self-tests the native
-helper on its real operating system and builds the renderer on all three
-platforms.
+scheduler cleanup, and drag inertia including camera-jump rejection, the lean
+cap, the direction each channel lags in, and return-to-rest. GitHub Actions
+then compiles and self-tests the native helper on its real operating system
+and builds the renderer on all three platforms.
 
 Headless CI cannot create a real Codex voice call or approve operating-system
 audio permissions. Before a release, manually run the checklist in
