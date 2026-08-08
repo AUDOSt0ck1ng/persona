@@ -43,8 +43,11 @@ function orbitTarget(controls: unknown, fallback: THREE.Vector3): THREE.Vector3 
 }
 
 interface Torso {
-  /** Each joint with its share of the lean; the shares sum to one. */
-  bones: { node: THREE.Object3D; weight: number }[];
+  /**
+   * Each joint with its share of the lean; the shares sum to one. `pose` is the
+   * rotation the animation left, kept so the lean can be taken back off.
+   */
+  bones: { node: THREE.Object3D; weight: number; pose: THREE.Quaternion }[];
   /** Hips-to-head distance at rest, so the lean scales with the model. */
   length: number;
 }
@@ -68,7 +71,7 @@ function readTorso(vrm: {
   );
   const bones = leanWeightsFor(present).flatMap(([name, weight]) => {
     const node = vrm.humanoid.getNormalizedBoneNode(name);
-    return node ? [{ node, weight }] : [];
+    return node ? [{ node, weight, pose: new THREE.Quaternion() }] : [];
   });
   if (bones.length === 0) return null;
   const length = hips
@@ -176,6 +179,7 @@ function AvatarModel({
     updateBlink(delta);
     updateLipSync(delta, audioLevel, speaking || bodySpeaking);
 
+    let leaned: Torso | null = null;
     if (dragInertia) {
       const torso = (torsoRef.current ??= readTorso(vrm));
       const { camera } = state;
@@ -212,6 +216,7 @@ function AvatarModel({
       advanceDragInertia(dragInertia, delta);
 
       if (torso && !isDragInertiaAtRest(dragInertia)) {
+        leaned = torso;
         // The lag is screen-relative, so it rides the camera basis. Held in
         // world axes it would swing along the view direction once the user had
         // orbited a quarter turn, and read as barely moving at all.
@@ -238,7 +243,8 @@ function AvatarModel({
           horizontal > 0 ? torsoLeanAngle(horizontal, torso.length) : 0;
         if (lean !== 0) LEAN_AXIS.divideScalar(horizontal);
 
-        for (const { node, weight } of torso.bones) {
+        for (const { node, weight, pose } of torso.bones) {
+          pose.copy(node.quaternion);
           if (lean !== 0) {
             node.quaternion.premultiply(
               LEAN.setFromAxisAngle(LEAN_AXIS, lean * weight),
@@ -255,6 +261,14 @@ function AvatarModel({
     }
 
     vrm.update(delta);
+
+    // `vrm.update` has copied the lean onto the render skeleton and the springs
+    // have answered it, so it is delivered. Take it back off: three-vrm never
+    // resets the normalized rig, so a lean left in place is layered on again
+    // every frame a clip is not driving that joint.
+    if (leaned) {
+      for (const { node, pose } of leaned.bones) node.quaternion.copy(pose);
+    }
   });
 
   return vrm ? <primitive object={vrm.scene} /> : null;

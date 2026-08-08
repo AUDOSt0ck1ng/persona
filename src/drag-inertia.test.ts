@@ -80,6 +80,22 @@ describe('torsoLeanAngle', () => {
     expect(torsoLeanAngle(1e6, 0.6)).toBeLessThan(Math.PI / 2);
   });
 
+  it('caps the angle, so a stubby torso cannot fold the body over', () => {
+    // A rig a tenth the usual height asks for atan(10), most of a right
+    // angle, for a lag that leans an adult torso by a few degrees.
+    expect(torsoLeanAngle(0.25, 0.025)).toBe(DEFAULT_DRAG_INERTIA.maxLean);
+    expect(torsoLeanAngle(-0.25, 0.025)).toBe(-DEFAULT_DRAG_INERTIA.maxLean);
+  });
+
+  it('leaves an adult torso at the largest lag the clamps allow alone', () => {
+    // `maxOffset` bounds each screen axis on its own, so the longest lag the
+    // caller can hand over is a saturated diagonal, not `maxOffset` itself.
+    const worst = DEFAULT_DRAG_INERTIA.maxOffset * Math.SQRT2;
+    const full = torsoLeanAngle(worst, 0.55);
+    expect(full).toBeLessThan(DEFAULT_DRAG_INERTIA.maxLean);
+    expect(full).toBeCloseTo(Math.atan(worst / 0.55));
+  });
+
   it('keeps sign, so the body trails whichever way the drag went', () => {
     expect(torsoLeanAngle(-0.2, 0.6)).toBeCloseTo(-torsoLeanAngle(0.2, 0.6));
   });
@@ -231,11 +247,13 @@ describe('drag inertia', () => {
     expect(Math.abs(state.x)).toBeLessThanOrEqual(DEFAULT_DRAG_INERTIA.maxOffset);
   });
 
-  it('twists opposite an orbit sweep and unwinds to the original facing', () => {
+  it('trails an orbit sweep and unwinds to the original facing', () => {
     const state = createDragInertiaState();
     queueOrbitRadians(state, 0.1);
     applyPendingOrbit(state);
-    expect(state.yaw).toBeCloseTo(-0.1 * DEFAULT_DRAG_INERTIA.yawGain);
+    // A sweep makes the stationary model appear to rotate by the negative of
+    // it, so trailing means turning with the sweep, not against it.
+    expect(state.yaw).toBeCloseTo(0.1 * DEFAULT_DRAG_INERTIA.yawGain);
 
     expect(settle(state)).toBeGreaterThan(0);
     // Facing must return exactly, or orbiting would slowly rotate the model.
@@ -248,14 +266,14 @@ describe('drag inertia', () => {
       queueOrbitRadians(state, 0.5);
       applyPendingOrbit(state);
     }
-    expect(state.yaw).toBeCloseTo(-DEFAULT_DRAG_INERTIA.maxYaw);
+    expect(state.yaw).toBeCloseTo(DEFAULT_DRAG_INERTIA.maxYaw);
   });
 
-  it('holds a visible twist while an orbit gesture is sustained', () => {
+  it('holds a steady twist while an orbit gesture is sustained', () => {
     // A steady drag: about 2 rad/s for a second, at 60fps. The spring eats
     // the lag as fast as the sweep adds it, so this settles at an equilibrium
-    // rather than accumulating. That equilibrium is what has to be visible;
-    // at a low gain it collapsed to a degree or two and read as nothing.
+    // rather than accumulating, and the equilibrium has to be a real angle
+    // rather than collapsing to nothing.
     const state = createDragInertiaState();
     let smallest = Infinity;
     for (let frame = 0; frame < 60; frame += 1) {
@@ -265,6 +283,45 @@ describe('drag inertia', () => {
       if (frame > 10) smallest = Math.min(smallest, Math.abs(state.yaw));
     }
     expect(smallest).toBeGreaterThan(0.1);
+  });
+
+  it('swings the body sideways as well as twisting it, both trailing', () => {
+    // The twist turns the body about a vertical axis through the spine and the
+    // head sits on that axis, so on its own it hardly moves the spring roots
+    // at all. The sideways swing is what the springs actually answer.
+    const state = createDragInertiaState();
+    queueOrbitRadians(state, 0.1);
+    applyPendingOrbit(state);
+    expect(state.x).toBeCloseTo(0.1 * DEFAULT_DRAG_INERTIA.orbitLeanGain);
+    expect(state.y).toBe(0);
+
+    // Same gesture, both routes: dragging right moves the window right and
+    // sweeps the azimuth negative, and the body has to trail the same way for
+    // either. Asserting the magnitude alone would pin whatever sign it has.
+    const swept = createDragInertiaState();
+    queueOrbitRadians(swept, -0.1);
+    applyPendingOrbit(swept);
+    const dragged = createDragInertiaState();
+    queueDragPixels(dragged, 100, 0);
+    applyPendingDrag(dragged, WORLD_PER_PIXEL);
+    expect(Math.sign(swept.x)).toBe(Math.sign(dragged.x));
+    // And the twist has to lag the same gesture, not lead it: the apparent
+    // rotation is the negative of the sweep, so the body turns with the sweep.
+    expect(Math.sign(swept.yaw)).toBe(Math.sign(-0.1));
+
+    expect(settle(state)).toBeGreaterThan(0);
+    // Both channels must return exactly, or orbiting would walk the model.
+    expect(state.x).toBe(0);
+    expect(state.yaw).toBe(0);
+  });
+
+  it('clamps the orbit swing to the same maximum lag as a drag', () => {
+    const state = createDragInertiaState();
+    for (let i = 0; i < 40; i += 1) {
+      queueOrbitRadians(state, 0.5);
+      applyPendingOrbit(state);
+    }
+    expect(state.x).toBeCloseTo(DEFAULT_DRAG_INERTIA.maxOffset);
   });
 
   it('reports rest only when the twist has settled too', () => {

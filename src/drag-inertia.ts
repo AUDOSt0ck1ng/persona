@@ -25,12 +25,23 @@ export interface DragInertiaSettings {
   stiffness: number;
   /** Velocity damping; below 2*sqrt(stiffness) the body overshoots. */
   damping: number;
-  /** Maximum lag in world units, so a fast drag cannot fling the model away. */
+  /**
+   * Maximum lag in world units, clamped per screen axis, so a fast drag cannot
+   * fling the model away. A saturated diagonal lags by `maxOffset * sqrt(2)`.
+   */
   maxOffset: number;
   /** Fraction of an orbit sweep the body twists before catching up. */
   yawGain: number;
   /** Maximum twist in radians. */
   maxYaw: number;
+  /** World units the body swings sideways per radian of orbit sweep. */
+  orbitLeanGain: number;
+  /**
+   * Maximum lean in radians, whatever the lag and however short the torso.
+   * `maxOffset` is a world distance and a torso is not, so the shorter the
+   * torso the steeper the angle the same lag asks for, without limit.
+   */
+  maxLean: number;
 }
 
 export const DEFAULT_DRAG_INERTIA: DragInertiaSettings = {
@@ -40,12 +51,19 @@ export const DEFAULT_DRAG_INERTIA: DragInertiaSettings = {
   maxOffset: 0.25,
   // A sustained gesture settles at roughly
   //   rate * gain * damping / stiffness
-  // because the spring eats the lag as fast as the gesture adds it. Orbiting
-  // sweeps a couple of radians per second at most, an order of magnitude less
-  // than a window drag covers in world units, so the angular gain has to be
-  // correspondingly larger to land in the same visible range.
+  // because the spring eats the lag as fast as the gesture adds it. That is
+  // what sizes both orbit gains: a sweep is a couple of radians per second at
+  // most, an order of magnitude less than a window drag covers in world units.
   yawGain: 1.0,
   maxYaw: 0.3,
+  // Sized so an ordinary orbit swings the body about as far as a solid window
+  // drag does, since that is the response already known to read on screen.
+  orbitLeanGain: 0.18,
+  // Above anything an adult torso is asked for -- the largest lag the clamps
+  // allow is a saturated diagonal, so atan(0.25 * sqrt(2) / 0.55) = 0.57 -- so
+  // this stays a backstop against a rig short enough to be folded rather than
+  // a second knob on the proportions the rest was tuned against.
+  maxLean: 0.6,
 };
 
 export interface DragInertiaState {
@@ -160,14 +178,16 @@ export function worldPerPixel(
 /**
  * Angle to tip the torso by so its top trails the gesture by `lagDistance`.
  * Saturates instead of growing without bound, so a long torso and a short one
- * lean by a comparable amount for the same drag.
+ * lean by a comparable amount for the same drag, and is capped outright at
+ * `maxLean` so a short torso cannot turn a legal lag into a fold in half.
  */
 export function torsoLeanAngle(
   lagDistance: number,
   torsoLength: number,
+  settings: DragInertiaSettings = DEFAULT_DRAG_INERTIA,
 ): number {
   if (!Number.isFinite(lagDistance) || !(torsoLength > 0)) return 0;
-  return Math.atan(lagDistance / torsoLength);
+  return clamp(Math.atan(lagDistance / torsoLength), Math.abs(settings.maxLean));
 }
 
 /**
@@ -204,8 +224,8 @@ export function leanWeightsFor(
 /**
  * Records an orbit sweep in radians. Orbiting moves the camera rather than
  * the character, so on its own it gives the spring bones nothing to react to.
- * The body answers with a brief twist that unwinds back to zero, which leaves
- * the character's facing unchanged once it settles.
+ * The body answers with a brief twist and a sideways swing, both of which
+ * unwind to zero, so a sweep leaves the character neither turned nor moved.
  */
 export function queueOrbitRadians(
   state: DragInertiaState,
@@ -222,7 +242,18 @@ export function applyPendingOrbit(
   const { pendingYaw } = state;
   state.pendingYaw = 0;
   if (pendingYaw === 0) return;
-  state.yaw = clamp(state.yaw - pendingYaw * settings.yawGain, settings.maxYaw);
+  // Sweeping the azimuth by `pendingYaw` makes the stationary model appear to
+  // rotate by the negative of it, so the body trails by turning with the sweep.
+  state.yaw = clamp(state.yaw + pendingYaw * settings.yawGain, settings.maxYaw);
+  // The twist alone barely reaches the springs: it turns the body about a
+  // vertical axis through the spine, and the head -- which the hair hangs off
+  // -- sits on that axis, so at the full `maxYaw` it displaces a hair root by
+  // about a third of what the gentlest window drag displaces the whole head.
+  // Sweeping the view also swings the body sideways, which does move it.
+  state.x = clamp(
+    state.x + pendingYaw * settings.orbitLeanGain,
+    settings.maxOffset,
+  );
 }
 
 /**

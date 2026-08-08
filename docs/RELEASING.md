@@ -63,6 +63,7 @@ Treat signed and notarized artifacts as the production release path.
    - packaged action edit, removal, and reset without changing user uploads;
    - random clip selection for voice-driven and MCP-triggered actions;
    - shortcut, URL protocol, zoom, orbit, and pan;
+   - secondary motion on window drag and orbit, settling back to rest;
    - transparent background and always-on-top behavior; and
    - uninstall.
 
