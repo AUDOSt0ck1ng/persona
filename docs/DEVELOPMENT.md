@@ -276,7 +276,8 @@ The Node suite covers settings persistence and imported-media boundaries, MCP
 discovery and tool calls, the bridge boundary, URL protocol, Hyprland rules,
 PipeWire selection and PCM normalization, process discovery on macOS and
 Windows, native NDJSON parsing, shared pause smoothing, listener lifecycle,
-asset safety, and release checksums.
+asset safety, release checksums, and VRoid Hub OAuth — including which refresh
+failures are allowed to discard the saved session and which must preserve it.
 
 Vitest covers animation priority and configured animation selection, speech
 signal gating, motion compatibility and variety, transition timing, async

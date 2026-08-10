@@ -538,6 +538,20 @@ function broadcastVroidHubStatus() {
   }
 }
 
+// getValidAccessToken drops the saved session when VRoid Hub rejects it, so
+// the Settings page has to be told or it keeps offering a connected account
+// that no longer exists.
+async function vroidHubAccessToken() {
+  if (!vroidHubAuth?.isConnected()) {
+    throw new Error("Connect your VRoid Hub account first.");
+  }
+  try {
+    return await vroidHubAuth.getValidAccessToken();
+  } finally {
+    if (!vroidHubAuth?.isConnected()) broadcastVroidHubStatus();
+  }
+}
+
 function refreshVroidHubStoragePolicy(snapshot = settingsStore?.getSnapshot()) {
   syncVroidHubStorageBackend(snapshot);
   if (!vroidCredentialsFilePath) return;
@@ -1143,10 +1157,7 @@ if (!app.requestSingleInstanceLock()) {
       return vroidHubStatus();
     });
     handleFromSettings("persona:vroid-list-characters", async () => {
-      if (!vroidHubAuth?.isConnected()) {
-        throw new Error("Connect your VRoid Hub account first.");
-      }
-      const token = await vroidHubAuth.getValidAccessToken();
+      const token = await vroidHubAccessToken();
       return vroidHubClient.listCharacters(token);
     });
     // Portraits load one card at a time after the list renders, so a slow or
@@ -1166,10 +1177,7 @@ if (!app.requestSingleInstanceLock()) {
     handleFromSettings(
       "persona:vroid-select-character",
       async (characterId, characterName) => {
-        if (!vroidHubAuth?.isConnected()) {
-          throw new Error("Connect your VRoid Hub account first.");
-        }
-        const token = await vroidHubAuth.getValidAccessToken();
+        const token = await vroidHubAccessToken();
         // No re-fetch of the character list to check characterId is in it:
         // that's not a real gate anyway, since /api/download_licenses below
         // is VRoid Hub's own authority on whether this id is licensable, and

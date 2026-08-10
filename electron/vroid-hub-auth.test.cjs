@@ -175,6 +175,214 @@ test("refreshes an access token automatically once it is close to expiring", asy
   assert.equal(call, 2);
 });
 
+// Signs in with an already-expired access token, so the next
+// getValidAccessToken() must refresh and `onRefresh` decides what it gets back.
+async function connectedWithExpiredToken(context, onRefresh) {
+  const { authFilePath } = fixture(context);
+  let call = 0;
+  const fetchImpl = fakeFetch((params) => {
+    call += 1;
+    if (call === 1) {
+      return jsonResponse(200, {
+        access_token: "access-1",
+        refresh_token: "refresh-1",
+        token_type: "Bearer",
+        expires_in: 0,
+      });
+    }
+    return onRefresh(params, call);
+  });
+  const auth = createAuth(context, { authFilePath, fetchImpl });
+  const url = new URL(auth.buildAuthorizeUrl());
+  await auth.exchangeCode("auth-code", url.searchParams.get("state"));
+  assert.equal(fs.existsSync(authFilePath), true);
+  return { auth, authFilePath, fetchImpl };
+}
+
+// The refresh token lives in this one file, so deleting it over a rate limit
+// or an outage costs a full re-authorization that nothing actually required.
+for (const status of [429, 500, 502, 503, 504, 403]) {
+  test(`keeps the session when a refresh hits a transient ${status}`, async (context) => {
+    const { auth, authFilePath } = await connectedWithExpiredToken(context, () =>
+      jsonResponse(status, {}),
+    );
+
+    await assert.rejects(
+      () => auth.getValidAccessToken(),
+      new RegExp(`could not refresh the session right now \\(${status}\\)`, "i"),
+    );
+    assert.equal(auth.isConnected(), true);
+    assert.equal(fs.existsSync(authFilePath), true);
+  });
+}
+
+test("recovers on the next attempt after a transient refresh failure", async (context) => {
+  const { auth } = await connectedWithExpiredToken(context, (params, call) => {
+    assert.equal(params.get("grant_type"), "refresh_token");
+    assert.equal(params.get("refresh_token"), "refresh-1");
+    if (call === 2) return jsonResponse(503, {});
+    return jsonResponse(200, {
+      access_token: "access-2",
+      refresh_token: "refresh-2",
+      token_type: "Bearer",
+      expires_in: 3600,
+    });
+  });
+
+  await assert.rejects(() => auth.getValidAccessToken(), /try again in a moment/i);
+
+  const token = await auth.getValidAccessToken();
+  assert.equal(token.accessToken, "access-2");
+});
+
+test("clears the session when VRoid Hub rejects the refresh token", async (context) => {
+  const { auth, authFilePath } = await connectedWithExpiredToken(context, () =>
+    jsonResponse(400, { error: "invalid_grant" }),
+  );
+
+  await assert.rejects(
+    () => auth.getValidAccessToken(),
+    /rejected the saved session \(400: invalid_grant\)/i,
+  );
+  assert.equal(auth.isConnected(), false);
+  assert.equal(fs.existsSync(authFilePath), false);
+});
+
+test("clears the session on a 401 whose body is not JSON", async (context) => {
+  const { auth, authFilePath } = await connectedWithExpiredToken(context, () => ({
+    ok: false,
+    status: 401,
+    json: async () => {
+      throw new SyntaxError("Unexpected token '<'");
+    },
+  }));
+
+  await assert.rejects(
+    () => auth.getValidAccessToken(),
+    /rejected the saved session \(401\)/i,
+  );
+  assert.equal(auth.isConnected(), false);
+  assert.equal(fs.existsSync(authFilePath), false);
+});
+
+test("keeps the session when the refresh request never gets a response", async (context) => {
+  const { auth, authFilePath } = await connectedWithExpiredToken(context, () => {
+    throw new TypeError("fetch failed");
+  });
+
+  await assert.rejects(() => auth.getValidAccessToken(), /fetch failed/);
+  assert.equal(auth.isConnected(), true);
+  assert.equal(fs.existsSync(authFilePath), true);
+});
+
+// A second concurrent refresh would present the token the first just rotated
+// away and come back invalid_grant, destroying a session that never expired.
+test("shares one request between concurrent refreshes", async (context) => {
+  let refreshCalls = 0;
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const { auth } = await connectedWithExpiredToken(context, async () => {
+    refreshCalls += 1;
+    await gate;
+    return jsonResponse(200, {
+      access_token: "access-2",
+      refresh_token: "refresh-2",
+      token_type: "Bearer",
+      expires_in: 3600,
+    });
+  });
+
+  const both = Promise.all([
+    auth.getValidAccessToken(),
+    auth.getValidAccessToken(),
+  ]);
+  release();
+  const [first, second] = await both;
+
+  assert.equal(refreshCalls, 1);
+  assert.equal(first.accessToken, "access-2");
+  assert.equal(second.accessToken, "access-2");
+});
+
+test("a refresh that lands after disconnect does not restore the session", async (context) => {
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const { auth, authFilePath } = await connectedWithExpiredToken(
+    context,
+    async () => {
+      await gate;
+      return jsonResponse(200, {
+        access_token: "access-2",
+        refresh_token: "refresh-2",
+        token_type: "Bearer",
+        expires_in: 3600,
+      });
+    },
+  );
+
+  const pending = assert.rejects(
+    () => auth.getValidAccessToken(),
+    /not connected/i,
+  );
+  auth.disconnect();
+  release();
+  await pending;
+
+  assert.equal(auth.isConnected(), false);
+  assert.equal(fs.existsSync(authFilePath), false);
+});
+
+// Reconnecting without disconnecting first replaces the session under an
+// in-flight refresh. That request now answers for a token nobody holds, so
+// leaving it in the shared slot would fail the next caller on the new session.
+test("a reconnect frees the shared refresh slot", async (context) => {
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  let signIns = 0;
+  const { authFilePath } = fixture(context);
+  const fetchImpl = fakeFetch(async (params) => {
+    if (params.get("grant_type") === "authorization_code") {
+      signIns += 1;
+      // expires_in 0 so each new session still needs a refresh to be usable.
+      return jsonResponse(200, {
+        access_token: `access-${signIns}`,
+        refresh_token: `refresh-${signIns}`,
+        token_type: "Bearer",
+        expires_in: 0,
+      });
+    }
+    await gate;
+    return jsonResponse(200, {
+      access_token: `refreshed-from-${params.get("refresh_token")}`,
+      refresh_token: "refresh-next",
+      token_type: "Bearer",
+      expires_in: 3600,
+    });
+  });
+  const auth = createAuth(context, { authFilePath, fetchImpl });
+  const firstUrl = new URL(auth.buildAuthorizeUrl());
+  await auth.exchangeCode("auth-code", firstUrl.searchParams.get("state"));
+
+  // Holds the shared slot for the rest of the test: it is never released
+  // before the second session's caller arrives.
+  const stale = auth.getValidAccessToken().catch((error) => error);
+  const secondUrl = new URL(auth.buildAuthorizeUrl());
+  await auth.exchangeCode("auth-code-2", secondUrl.searchParams.get("state"));
+
+  const fresh = auth.getValidAccessToken();
+  release();
+
+  assert.equal((await fresh).accessToken, "refreshed-from-refresh-2");
+  assert.match((await stale).message, /not connected/i);
+  assert.equal(auth.isConnected(), true);
+});
+
 test("clears the persisted session on disconnect", async (context) => {
   const { authFilePath } = fixture(context);
   const { encrypt, decrypt } = hexCodec();

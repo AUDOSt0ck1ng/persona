@@ -12,6 +12,12 @@ const PENDING_FLOW_TIMEOUT_MS = 10 * 60 * 1000;
 const TOKEN_REFRESH_SKEW_MS = 60 * 1000;
 const DEFAULT_EXPIRES_IN_SECONDS = 60 * 60;
 const TOKEN_REQUEST_TIMEOUT_MS = 15 * 1000;
+// The only statuses that mean the refresh token itself is dead: per RFC 6749
+// §5.2 the token endpoint reports every protocol-level rejection as a 400, or
+// a 401 for bad client credentials. Rate limits (429), outages (5xx), and WAF
+// challenges (403) leave it perfectly usable — and since the encrypted token
+// file is its only copy, discarding it there costs a full re-authorization.
+const UNRECOVERABLE_REFRESH_STATUSES = new Set([400, 401]);
 
 function base64UrlEncode(buffer) {
   return buffer
@@ -26,6 +32,19 @@ function tokenRequestHeaders() {
     "content-type": "application/x-www-form-urlencoded",
     "X-Api-Version": API_VERSION,
   };
+}
+
+// A failed token response's OAuth `error` code, for the message only. A token
+// endpoint having a bad day can answer with HTML, so this never throws.
+async function oauthErrorCode(response) {
+  try {
+    const body = await response.json();
+    return typeof body?.error === "string" && body.error !== ""
+      ? body.error
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -55,6 +74,7 @@ function createVroidHubAuth({
 
   let pendingFlow = null; // { state, codeVerifier, expiresAt }
   let tokens = readTokens();
+  let refreshInFlight = null;
 
   function readTokens() {
     try {
@@ -104,6 +124,9 @@ function createVroidHubAuth({
       throw new Error("VRoid Hub returned an unexpected token response.");
     }
     const expiresInSeconds = Number(payload.expires_in);
+    // Whatever refresh is in flight now answers for the session being replaced,
+    // so it must not stay in the slot and reject a later caller.
+    refreshInFlight = null;
     tokens = {
       access_token: payload.access_token,
       refresh_token: payload.refresh_token,
@@ -177,33 +200,67 @@ function createVroidHubAuth({
     storeTokenResponse(await response.json());
   }
 
-  async function refreshTokens() {
-    if (!tokens) throw new Error("VRoid Hub is not connected.");
+  async function requestRefresh(refreshToken) {
     const response = await fetchImpl(TOKEN_URL, {
       method: "POST",
       headers: tokenRequestHeaders(),
       body: new URLSearchParams({
         grant_type: "refresh_token",
-        refresh_token: tokens.refresh_token,
+        refresh_token: refreshToken,
         client_id: clientId,
         client_secret: clientSecret,
       }),
       signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
     });
+    // disconnect() can land while this request is in flight; answering for a
+    // refresh token the session no longer holds would resurrect an account the
+    // user just disconnected.
+    const stillCurrent = () => tokens?.refresh_token === refreshToken;
+
     if (!response.ok) {
-      tokens = null;
-      writeTokens();
+      const code = await oauthErrorCode(response);
+      if (UNRECOVERABLE_REFRESH_STATUSES.has(response.status)) {
+        if (stillCurrent()) {
+          tokens = null;
+          writeTokens();
+        }
+        throw new Error(
+          `VRoid Hub rejected the saved session (${response.status}` +
+            `${code ? `: ${code}` : ""}). Reconnect your account.`,
+        );
+      }
       throw new Error(
-        `VRoid Hub session expired (${response.status}). Reconnect your account.`,
+        `VRoid Hub could not refresh the session right now (${response.status}` +
+          `${code ? `: ${code}` : ""}). Your account is still connected — try again in a moment.`,
       );
     }
-    storeTokenResponse(await response.json());
+
+    const payload = await response.json();
+    if (!stillCurrent()) throw new Error("VRoid Hub is not connected.");
+    storeTokenResponse(payload);
+  }
+
+  function refreshTokens() {
+    if (!tokens) return Promise.reject(new Error("VRoid Hub is not connected."));
+    // VRoid Hub rotates the refresh token on every use, so a second concurrent
+    // refresh would present the one the first just retired — a self-inflicted
+    // `invalid_grant` indistinguishable from a genuinely dead session.
+    if (refreshInFlight) return refreshInFlight;
+    // Cleared by identity, since disconnect() can detach this request and a
+    // newer one may already hold the slot by the time it settles.
+    const inFlight = requestRefresh(tokens.refresh_token).finally(() => {
+      if (refreshInFlight === inFlight) refreshInFlight = null;
+    });
+    refreshInFlight = inFlight;
+    return inFlight;
   }
 
   async function getValidAccessToken() {
     if (!tokens) throw new Error("VRoid Hub is not connected.");
     if (tokens.expires_at - TOKEN_REFRESH_SKEW_MS <= Date.now()) {
       await refreshTokens();
+      // A shared refresh can resolve after disconnect() emptied the session.
+      if (!tokens) throw new Error("VRoid Hub is not connected.");
     }
     return { accessToken: tokens.access_token, tokenType: tokens.token_type };
   }
@@ -214,6 +271,9 @@ function createVroidHubAuth({
 
   function disconnect() {
     pendingFlow = null;
+    // Detached rather than awaited: whatever it returns can no longer apply to
+    // this session, and requestRefresh's own guard keeps it from writing.
+    refreshInFlight = null;
     tokens = null;
     writeTokens();
   }
