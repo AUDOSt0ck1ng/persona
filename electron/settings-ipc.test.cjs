@@ -107,9 +107,16 @@ test("main registers every settings and VRoid Hub channel behind the gate", () =
   const channels = (pattern) =>
     [...source.matchAll(pattern)].map((match) => match[1]).sort();
 
-  const ungated = channels(/ipcMain\.(?:handle|on)\(\s*"([^"]+)"/g);
-  const gated = channels(/handleFromSettings\(\s*"([^"]+)"/g);
+  const ungated = channels(/ipcMain\.\w+\(\s*['"]([^'"]+)['"]/g);
+  const gated = channels(/handleFromSettings\(\s*['"]([^'"]+)['"]/g);
 
+  // Any ipcMain method, any quote style, and the channel named inline, so a
+  // handleOnce or a single-quoted registration cannot slip past the pin.
+  assert.equal(
+    [...source.matchAll(/ipcMain\.\w+\(/g)].length,
+    ungated.length,
+    "every ipcMain registration must name its channel as a literal",
+  );
   assert.deepEqual(ungated, [
     "persona:get-snapshot",
     "persona:hide",
