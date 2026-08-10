@@ -381,6 +381,62 @@ test("rejects a redirect response with no Location header", async (context) => {
   );
 });
 
+// Revoking the app on hub.vroid.com invalidates the access token immediately,
+// while expires_at still looks fine — so a 401 is the only sign the session
+// needs re-checking, and main.cjs can only act on it if the status survives.
+test("tags a failed API request with its status so a 401 is recognizable", async (context) => {
+  const server = await startFakeHub(context, {
+    onRequest(_request, response) {
+      json(response, 401, { error: "unauthorized" });
+    },
+  });
+  const client = createVroidHubClient({
+    baseUrl: `http://127.0.0.1:${server.address().port}`,
+  });
+
+  const error = await client.listCharacters(TOKEN).catch((reason) => reason);
+  assert.equal(error.status, 401);
+  assert.match(error.message, /API request failed \(401\)/);
+});
+
+test("tags a denied download license with its status", async (context) => {
+  const server = await startFakeHub(context, {
+    onRequest(_request, response) {
+      json(response, 401, { error: "unauthorized" });
+    },
+  });
+  const client = createVroidHubClient({
+    baseUrl: `http://127.0.0.1:${server.address().port}`,
+  });
+
+  const error = await client
+    .loadCharacterModel(TOKEN, "model-1")
+    .catch((reason) => reason);
+  assert.equal(error.status, 401);
+});
+
+// A success here is itself a redirect, so `ok` can't mark one — only the
+// Location header can. Its absence still has to carry the status through.
+test("tags a missing download redirect with its status", async (context) => {
+  const server = await startFakeHub(context, {
+    onRequest(request, response) {
+      if (request.url === "/api/download_licenses") {
+        return json(response, 200, { data: { id: "license-1" } });
+      }
+      json(response, 401, { error: "unauthorized" });
+    },
+  });
+  const client = createVroidHubClient({
+    baseUrl: `http://127.0.0.1:${server.address().port}`,
+  });
+
+  const error = await client
+    .loadCharacterModel(TOKEN, "model-1")
+    .catch((reason) => reason);
+  assert.equal(error.status, 401);
+  assert.match(error.message, /download URL \(401\)/);
+});
+
 test("carries the owning character's id, which a model's Hub page is addressed by", async (context) => {
   const server = await startFakeHub(context, {
     onRequest(request, response) {

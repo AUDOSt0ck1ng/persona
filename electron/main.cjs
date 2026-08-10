@@ -538,6 +538,40 @@ function broadcastVroidHubStatus() {
   }
 }
 
+// getValidAccessToken drops the saved session when VRoid Hub rejects it, so
+// the Settings page has to be told or it keeps offering a connected account
+// that no longer exists.
+async function vroidHubAccessToken(options) {
+  if (!vroidHubAuth?.isConnected()) {
+    throw new Error("Connect your VRoid Hub account first.");
+  }
+  try {
+    return await vroidHubAuth.getValidAccessToken(options);
+  } finally {
+    if (!vroidHubAuth?.isConnected()) broadcastVroidHubStatus();
+  }
+}
+
+// Runs an API call with the current access token, and on a 401 runs it once
+// more behind a forced refresh.
+//
+// Revoking Persona on hub.vroid.com invalidates the access token immediately,
+// but nothing tells the app: expires_at still looks fine, so no refresh is due
+// and every call just answers 401. Forcing the refresh puts the question to
+// the token endpoint, which is the only authority on whether the whole
+// authorization is gone — it answers invalid_grant, the session is cleared,
+// and the user finally gets "reconnect your account" instead of a bare 401.
+// Deciding that from the API's 401 alone would be the mistake this path exists
+// to avoid: destroying credentials on the say-so of one resource-server reply.
+async function withVroidHubAuthRetry(call) {
+  try {
+    return await call(await vroidHubAccessToken());
+  } catch (error) {
+    if (error?.status !== 401) throw error;
+    return call(await vroidHubAccessToken({ forceRefresh: true }));
+  }
+}
+
 function refreshVroidHubStoragePolicy(snapshot = settingsStore?.getSnapshot()) {
   syncVroidHubStorageBackend(snapshot);
   if (!vroidCredentialsFilePath) return;
@@ -1143,11 +1177,9 @@ if (!app.requestSingleInstanceLock()) {
       return vroidHubStatus();
     });
     handleFromSettings("persona:vroid-list-characters", async () => {
-      if (!vroidHubAuth?.isConnected()) {
-        throw new Error("Connect your VRoid Hub account first.");
-      }
-      const token = await vroidHubAuth.getValidAccessToken();
-      return vroidHubClient.listCharacters(token);
+      return withVroidHubAuthRetry((token) =>
+        vroidHubClient.listCharacters(token),
+      );
     });
     // Portraits load one card at a time after the list renders, so a slow or
     // unreachable image CDN delays a thumbnail rather than the whole picker.
@@ -1166,17 +1198,14 @@ if (!app.requestSingleInstanceLock()) {
     handleFromSettings(
       "persona:vroid-select-character",
       async (characterId, characterName) => {
-        if (!vroidHubAuth?.isConnected()) {
-          throw new Error("Connect your VRoid Hub account first.");
-        }
-        const token = await vroidHubAuth.getValidAccessToken();
         // No re-fetch of the character list to check characterId is in it:
         // that's not a real gate anyway, since /api/download_licenses below
         // is VRoid Hub's own authority on whether this id is licensable, and
         // the renderer already has this id from the list it just rendered.
-        const buffer = await vroidHubClient.loadCharacterModel(
-          token,
-          characterId,
+        // Safe to run twice: a 401 can only come from the two authorized
+        // calls, and replaying them just mints a second download license.
+        const buffer = await withVroidHubAuthRetry((token) =>
+          vroidHubClient.loadCharacterModel(token, characterId),
         );
         return publishSettings(
           settingsStore.setActiveHubModel(buffer, {

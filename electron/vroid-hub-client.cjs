@@ -61,6 +61,15 @@ function characterModelPageUrl(characterId, characterModelId) {
   );
 }
 
+// Carries the HTTP status alongside the message so a caller can tell a 401 —
+// the only sign that VRoid Hub stopped honouring an access token that still
+// looks valid by the clock — from any other failure.
+function httpError(message, status) {
+  const error = new Error(message);
+  error.status = status;
+  return error;
+}
+
 function authorizedHeaders({ accessToken, tokenType = "Bearer" } = {}, extra = {}) {
   if (typeof accessToken !== "string" || accessToken === "") {
     throw new Error("A VRoid Hub access token is required.");
@@ -201,7 +210,10 @@ function createVroidHubClient({
       signal: AbortSignal.timeout(API_REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) {
-      throw new Error(`VRoid Hub API request failed (${response.status}).`);
+      throw httpError(
+        `VRoid Hub API request failed (${response.status}).`,
+        response.status,
+      );
     }
     return response.json();
   }
@@ -344,8 +356,9 @@ function createVroidHubClient({
       },
     );
     if (!licenseResponse.ok) {
-      throw new Error(
+      throw httpError(
         `VRoid Hub declined to license this model for download (${licenseResponse.status}).`,
+        licenseResponse.status,
       );
     }
     const license = await licenseResponse.json();
@@ -367,9 +380,15 @@ function createVroidHubClient({
         signal: AbortSignal.timeout(API_REQUEST_TIMEOUT_MS),
       },
     );
+    // A success here *is* a redirect, so `ok` says nothing: the Location
+    // header is what marks one. Its absence carries the status so an expired
+    // or revoked token reads as a 401 rather than a missing URL.
     const downloadUrl = downloadResponse.headers.get("location");
     if (typeof downloadUrl !== "string" || downloadUrl === "") {
-      throw new Error("VRoid Hub did not return a model download URL.");
+      throw httpError(
+        `VRoid Hub did not return a model download URL (${downloadResponse.status}).`,
+        downloadResponse.status,
+      );
     }
 
     const fileResponse = await fetchImpl(downloadUrl, {

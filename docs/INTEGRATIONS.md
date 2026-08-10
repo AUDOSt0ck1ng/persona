@@ -234,3 +234,15 @@ Selecting one fetches its VRM bytes through VRoid Hub's licensed
 `download_licenses` flow and holds them in memory for the running session —
 Persona does not write a hub-sourced model to disk as an ordinary, freely
 reusable local file, and it disappears on the next launch until reselected.
+
+The connection then stays signed in on its own. VRoid Hub's access tokens last
+about an hour, so Persona trades its stored refresh token for a new one
+whenever you use the picker with a stale one — there is no background activity
+between launches, and closing Persona changes nothing. You are only asked to
+reconnect when the authorization itself is gone: you revoked Persona from your
+VRoid Hub account, or you replaced the OAuth app credentials in Settings.
+VRoid Hub being unreachable — an outage, rate limiting — fails the action you
+were taking and says so, but leaves the connection intact, so retrying once
+it recovers costs nothing. Revoking from
+[`hub.vroid.com`](https://hub.vroid.com) takes effect on the next action rather
+than immediately, since Persona only learns about it by being turned away.
