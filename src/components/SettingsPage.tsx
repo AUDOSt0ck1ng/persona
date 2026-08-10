@@ -312,6 +312,104 @@ function MillisecondRangeSlider({
   );
 }
 
+function expressionWeightFrom(input: HTMLInputElement): number | null {
+  const weight = input.valueAsNumber;
+  return Number.isFinite(weight) && weight >= 0 && weight <= 1 ? weight : null;
+}
+
+/** The expression overlay fields shared by the create and edit action forms. */
+function ExpressionFields({
+  metadata,
+  onChange,
+}: {
+  metadata: CustomAnimationMetadata;
+  onChange: (patch: Partial<CustomAnimationMetadata>) => void;
+}) {
+  return (
+    <>
+      <label>
+        Expression <code>expression_name</code>
+        <select
+          onChange={(event) =>
+            onChange({
+              expression_name:
+                (event.target.value as PersonaExpressionName) || null,
+            })
+          }
+          value={metadata.expression_name ?? ''}
+        >
+          <option value="">None</option>
+          {EXPRESSION_OPTIONS.map((expression) => (
+            <option key={expression} value={expression}>
+              {expression}
+            </option>
+          ))}
+        </select>
+        <small>
+          Blends a VRM expression over the face while the action plays.
+        </small>
+      </label>
+      {metadata.expression_name && (
+        <div className="expression-weight-field">
+          <div className="expression-weight-row">
+            <label>
+              <span>
+                Expression weight <code>expression_weight</code>
+              </span>
+              <input
+                className="single-range-slider"
+                max="1"
+                min="0"
+                onChange={(event) =>
+                  onChange({ expression_weight: Number(event.target.value) })
+                }
+                step="0.05"
+                style={singleRangeStyle(metadata.expression_weight, 0, 1)}
+                type="range"
+                value={metadata.expression_weight}
+              />
+              <div className="slider-labels">
+                <span>0.00</span>
+                <span>0.50</span>
+                <span>1.00</span>
+              </div>
+            </label>
+            {/* Out-of-range and half-typed values are ignored while editing,
+                then the field snaps back to the stored weight on blur. */}
+            <input
+              aria-label="Expression weight value"
+              className="expression-weight-value"
+              max="1"
+              min="0"
+              onBlur={(event) => {
+                const weight = expressionWeightFrom(event.currentTarget);
+                if (weight == null) {
+                  event.currentTarget.value = String(
+                    metadata.expression_weight,
+                  );
+                }
+              }}
+              onChange={(event) => {
+                const weight = expressionWeightFrom(event.currentTarget);
+                if (weight != null) onChange({ expression_weight: weight });
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') event.currentTarget.blur();
+              }}
+              step="0.05"
+              type="number"
+              value={metadata.expression_weight}
+            />
+          </div>
+          <small className="field-hint">
+            Between 0.00 (expression off) and 1.00 (full strength).
+          </small>
+        </div>
+      )}
+    </>
+  );
+}
+
 const SECTION_ICONS: Record<SettingsSection, ReactNode> = {
   models: (
     <Icon>
@@ -1839,6 +1937,19 @@ export function SettingsPage() {
                             <b>Trigger:</b>{' '}
                             {animation.animation_trigger_scenario}
                           </small>
+                          <small className="animation-card-expression">
+                            <b>Expression:</b>{' '}
+                            {animation.expression_name ? (
+                              <>
+                                {animation.expression_name}
+                                <span className="expression-weight-tag">
+                                  {animation.expression_weight.toFixed(2)}
+                                </span>
+                              </>
+                            ) : (
+                              'None'
+                            )}
+                          </small>
                         </div>
                         <div className="animation-card-actions">
                           {animation.editable && (
@@ -2016,44 +2127,15 @@ export function SettingsPage() {
                         }
                       />
                     </label>
-                    <label>
-                      Expression <code>expression_name</code>
-                      <select
-                        value={editingAnimationMetadata.expression_name ?? ''}
-                        onChange={(event) =>
-                          setEditingAnimationMetadata((current) => ({
-                            ...current,
-                            expression_name:
-                              (event.target.value as PersonaExpressionName) || null,
-                          }))
-                        }
-                      >
-                        <option value="">None</option>
-                        {EXPRESSION_OPTIONS.map((expression) => (
-                          <option key={expression} value={expression}>
-                            {expression}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    {editingAnimationMetadata.expression_name && (
-                      <label>
-                        Expression weight <code>expression_weight</code>
-                        <input
-                          type="number"
-                          min="0"
-                          max="1"
-                          step="0.05"
-                          value={editingAnimationMetadata.expression_weight}
-                          onChange={(event) =>
-                            setEditingAnimationMetadata((current) => ({
-                              ...current,
-                              expression_weight: Number(event.target.value),
-                            }))
-                          }
-                        />
-                      </label>
-                    )}
+                    <ExpressionFields
+                      metadata={editingAnimationMetadata}
+                      onChange={(patch) =>
+                        setEditingAnimationMetadata((current) => ({
+                          ...current,
+                          ...patch,
+                        }))
+                      }
+                    />
                   </div>
                   <div className="form-actions">
                     <button
@@ -2142,44 +2224,15 @@ export function SettingsPage() {
                       value={animationMetadata.animation_trigger_scenario}
                     />
                   </label>
-                  <label>
-                    Expression <code>expression_name</code>
-                    <select
-                      value={animationMetadata.expression_name ?? ''}
-                      onChange={(event) =>
-                        setAnimationMetadata((current) => ({
-                          ...current,
-                          expression_name:
-                            (event.target.value as PersonaExpressionName) || null,
-                        }))
-                      }
-                    >
-                      <option value="">None</option>
-                      {EXPRESSION_OPTIONS.map((expression) => (
-                        <option key={expression} value={expression}>
-                          {expression}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {animationMetadata.expression_name && (
-                    <label>
-                      Expression weight <code>expression_weight</code>
-                      <input
-                        type="number"
-                        min="0"
-                        max="1"
-                        step="0.05"
-                        value={animationMetadata.expression_weight}
-                        onChange={(event) =>
-                          setAnimationMetadata((current) => ({
-                            ...current,
-                            expression_weight: Number(event.target.value),
-                          }))
-                        }
-                      />
-                    </label>
-                  )}
+                  <ExpressionFields
+                    metadata={animationMetadata}
+                    onChange={(patch) =>
+                      setAnimationMetadata((current) => ({
+                        ...current,
+                        ...patch,
+                      }))
+                    }
+                  />
                 </div>
                 <button
                   className="primary-button"
