@@ -9,7 +9,7 @@ Persona has four intentionally narrow layers:
 2. The Electron main process owns lifecycle, window behavior, tray commands,
    URL handling, the local adapter, and Persona's MCP controls.
 3. The sandboxed preload exposes only normalized Persona events and narrow
-   settings operations.
+   settings operations, the privileged ones gated to the Settings window.
 4. React and Three.js render the model, blend VRMA motion, and drive VRM
    expressions.
 

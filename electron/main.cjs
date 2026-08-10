@@ -50,6 +50,7 @@ const {
 const { createAudioListener } = require("./audio-listener.cjs");
 const { listVoiceSources } = require("./voice-source-discovery.cjs");
 const { isAllowedRendererNavigation } = require("./navigation-policy.cjs");
+const { createSettingsIpcGate } = require("./settings-ipc.cjs");
 const { snapshotHasConfiguredModel } = require("./model-readiness.cjs");
 const { parseProtocolUrl, voiceState } = require("./protocol-actions.cjs");
 const {
@@ -514,14 +515,10 @@ function vroidHubSecureStorageAvailable(snapshot = settingsStore?.getSnapshot())
   return safeStorage.getSelectedStorageBackend?.() !== "basic_text";
 }
 
-function requireSettingsSender(event) {
-  if (!settingsWindow || settingsWindow.isDestroyed()) {
-    throw new Error("The Settings window is not available.");
-  }
-  if (event.sender !== settingsWindow.webContents) {
-    throw new Error("This request must come from the Settings window.");
-  }
-}
+const { handleFromSettings, isSettingsSender } = createSettingsIpcGate({
+  ipcMain,
+  getSettingsWindow: () => settingsWindow,
+});
 
 function vroidHubStatus() {
   return {
@@ -914,19 +911,19 @@ if (!app.requestSingleInstanceLock()) {
 
     ipcMain.handle("persona:get-snapshot", () => latestEvent);
     ipcMain.handle("persona:settings-get", () => settingsStore.getSnapshot());
-    ipcMain.handle("persona:settings-import-model", async (_event, metadata) => {
+    handleFromSettings("persona:settings-import-model", async (metadata) => {
       const filePath = await selectAssetFile("model");
       if (!filePath) return null;
       return publishSettings(
         settingsStore.importModel({ filePath, model_name: metadata?.model_name }),
       );
     });
-    ipcMain.handle("persona:settings-create-animation", (_event, metadata) =>
+    handleFromSettings("persona:settings-create-animation", (metadata) =>
       publishSettings(settingsStore.createAnimation(metadata)),
     );
-    ipcMain.handle(
+    handleFromSettings(
       "persona:settings-add-animation-clips",
-      async (_event, animationId) => {
+      async (animationId) => {
         const filePaths = await selectAssetFile("animation", true);
         if (filePaths.length === 0) return null;
         return publishSettings(
@@ -934,32 +931,32 @@ if (!app.requestSingleInstanceLock()) {
         );
       },
     );
-    ipcMain.handle(
+    handleFromSettings(
       "persona:settings-update-animation",
-      (_event, animationId, metadata) =>
+      (animationId, metadata) =>
         publishSettings(
           settingsStore.updateAnimation(animationId, metadata),
         ),
     );
-    ipcMain.handle(
+    handleFromSettings(
       "persona:settings-delete-animation",
-      (_event, animationId) =>
+      (animationId) =>
         publishSettings(settingsStore.deleteAnimation(animationId)),
     );
-    ipcMain.handle(
+    handleFromSettings(
       "persona:settings-delete-animation-clip",
-      (_event, animationId, clipId) =>
+      (animationId, clipId) =>
         publishSettings(
           settingsStore.deleteAnimationClip(animationId, clipId),
         ),
     );
-    ipcMain.handle(
+    handleFromSettings(
       "persona:settings-reset-packaged-animations",
       () => publishSettings(settingsStore.resetPackagedAnimations()),
     );
-    ipcMain.handle(
+    handleFromSettings(
       "persona:settings-delete-model",
-      (_event, modelId) => {
+      (modelId) => {
         const model = settingsStore
           .getSnapshot()
           .models.find((candidate) => candidate.id === modelId);
@@ -969,15 +966,15 @@ if (!app.requestSingleInstanceLock()) {
         return publishSettings(settingsStore.deleteModel(modelId));
       },
     );
-    ipcMain.handle("persona:settings-set-default-model", (_event, modelId) =>
+    handleFromSettings("persona:settings-set-default-model", (modelId) =>
       publishSettings(settingsStore.setDefaultModel(modelId)),
     );
-    ipcMain.handle("persona:settings-set-character-size", (_event, size) =>
+    handleFromSettings("persona:settings-set-character-size", (size) =>
       publishSettings(settingsStore.setCharacterSize(size)),
     );
-    ipcMain.handle(
+    handleFromSettings(
       "persona:settings-set-avatar-window-size",
-      (_event, width, height) => {
+      (width, height) => {
         const snapshot = publishSettings(
           settingsStore.setAvatarWindowSize(width, height),
         );
@@ -985,38 +982,38 @@ if (!app.requestSingleInstanceLock()) {
         return snapshot;
       },
     );
-    ipcMain.handle(
+    handleFromSettings(
       "persona:settings-set-speaking-transition",
-      (_event, transition) =>
+      (transition) =>
         publishSettings(settingsStore.setSpeakingTransition(transition)),
     );
-    ipcMain.handle(
+    handleFromSettings(
       "persona:settings-set-body-transition-ms",
-      (_event, milliseconds) =>
+      (milliseconds) =>
         publishSettings(settingsStore.setBodyTransitionMs(milliseconds)),
     );
-    ipcMain.handle(
+    handleFromSettings(
       "persona:settings-set-speaking-debounce-ms",
-      (_event, milliseconds) =>
+      (milliseconds) =>
         publishSettings(settingsStore.setSpeakingDebounceMs(milliseconds)),
     );
-    ipcMain.handle(
+    handleFromSettings(
       "persona:settings-set-idle-interim-ms",
-      (_event, milliseconds) =>
+      (milliseconds) =>
         publishSettings(settingsStore.setIdleInterimMs(milliseconds)),
     );
-    ipcMain.handle("persona:settings-enable-developer", () =>
+    handleFromSettings("persona:settings-enable-developer", () =>
       publishSettings(settingsStore.enableDeveloperSettings()),
     );
-    ipcMain.handle("persona:settings-reset-developer", () => {
+    handleFromSettings("persona:settings-reset-developer", () => {
       const snapshot = publishSettings(settingsStore.resetDeveloperSettings());
       refreshVroidHubStoragePolicy(snapshot);
       broadcastVroidHubStatus();
       return settingsStore.getSnapshot();
     });
-    ipcMain.handle(
+    handleFromSettings(
       "persona:settings-set-vroid-plaintext-storage",
-      (_event, allowed) => {
+      (allowed) => {
         const snapshot = publishSettings(
           settingsStore.setVroidHubPlaintextStorageAllowed(allowed),
         );
@@ -1043,12 +1040,12 @@ if (!app.requestSingleInstanceLock()) {
         return settingsStore.getSnapshot();
       },
     );
-    ipcMain.handle("persona:settings-set-voice-source", (_event, voiceSource) => {
+    handleFromSettings("persona:settings-set-voice-source", (voiceSource) => {
       const snapshot = publishSettings(settingsStore.setVoiceSource(voiceSource));
       restartAudioListener();
       return snapshot;
     });
-    ipcMain.handle("persona:settings-list-voice-sources", async () => {
+    handleFromSettings("persona:settings-list-voice-sources", async () => {
       try {
         return {
           ...(await listVoiceSources()),
@@ -1066,17 +1063,17 @@ if (!app.requestSingleInstanceLock()) {
         };
       }
     });
-    ipcMain.handle(
+    handleFromSettings(
       "persona:settings-set-model-lighting",
-      (_event, modelId, lighting) =>
+      (modelId, lighting) =>
         publishSettings(settingsStore.setModelLighting(modelId, lighting)),
     );
-    ipcMain.handle(
+    handleFromSettings(
       "persona:settings-reset-model-lighting",
-      (_event, modelId) =>
+      (modelId) =>
         publishSettings(settingsStore.resetModelLighting(modelId)),
     );
-    ipcMain.handle("persona:settings-get-mcp-status", () =>
+    handleFromSettings("persona:settings-get-mcp-status", () =>
       createMcpSettingsStatus({
         error: mcpServerError,
         health: mcpServerHealth,
@@ -1084,12 +1081,8 @@ if (!app.requestSingleInstanceLock()) {
         settingsSnapshot: settingsStore.getSnapshot(),
       }),
     );
-    ipcMain.handle("persona:vroid-get-status", (event) => {
-      requireSettingsSender(event);
-      return vroidHubStatus();
-    });
-    ipcMain.handle("persona:vroid-get-credentials", (event) => {
-      requireSettingsSender(event);
+    handleFromSettings("persona:vroid-get-status", () => vroidHubStatus());
+    handleFromSettings("persona:vroid-get-credentials", () => {
       if (!vroidHubSecureStorageAvailable()) {
         return { clientId: null, hasClientSecret: false };
       }
@@ -1103,10 +1096,9 @@ if (!app.requestSingleInstanceLock()) {
         hasClientSecret: credentials != null,
       };
     });
-    ipcMain.handle(
+    handleFromSettings(
       "persona:vroid-set-credentials",
-      (event, clientId, clientSecret) => {
-        requireSettingsSender(event);
+      (clientId, clientSecret) => {
         if (!vroidHubSecureStorageAvailable()) {
           throw new Error(
             "This OS has no secure credential storage available, so VRoid Hub credentials cannot be saved.",
@@ -1127,8 +1119,7 @@ if (!app.requestSingleInstanceLock()) {
         return vroidHubStatus();
       },
     );
-    ipcMain.handle("persona:vroid-clear-credentials", (event) => {
-      requireSettingsSender(event);
+    handleFromSettings("persona:vroid-clear-credentials", () => {
       clearVroidHubCredentials({ credentialsFilePath: vroidCredentialsFilePath });
       vroidHubAuth?.disconnect();
       vroidHubAuth = null;
@@ -1137,8 +1128,7 @@ if (!app.requestSingleInstanceLock()) {
       broadcastVroidHubStatus();
       return vroidHubStatus();
     });
-    ipcMain.handle("persona:vroid-connect", (event) => {
-      requireSettingsSender(event);
+    handleFromSettings("persona:vroid-connect", () => {
       if (!vroidHubAuth) {
         throw new Error(
           "VRoid Hub is not configured. Add your VRoid Hub app credentials in Settings first.",
@@ -1147,14 +1137,12 @@ if (!app.requestSingleInstanceLock()) {
       void shell.openExternal(vroidHubAuth.buildAuthorizeUrl());
       return vroidHubStatus();
     });
-    ipcMain.handle("persona:vroid-disconnect", (event) => {
-      requireSettingsSender(event);
+    handleFromSettings("persona:vroid-disconnect", () => {
       vroidHubAuth?.disconnect();
       publishSettings(settingsStore.clearActiveHubModel());
       return vroidHubStatus();
     });
-    ipcMain.handle("persona:vroid-list-characters", async (event) => {
-      requireSettingsSender(event);
+    handleFromSettings("persona:vroid-list-characters", async () => {
       if (!vroidHubAuth?.isConnected()) {
         throw new Error("Connect your VRoid Hub account first.");
       }
@@ -1166,20 +1154,18 @@ if (!app.requestSingleInstanceLock()) {
     // Only ids from the last listing resolve to a URL (see the client), and a
     // missing portrait is a null, not an error — the card just keeps its
     // placeholder icon.
-    ipcMain.handle(
+    handleFromSettings(
       "persona:vroid-character-portrait",
-      async (event, characterId) => {
-        requireSettingsSender(event);
+      async (characterId) => {
         if (typeof characterId !== "string" || characterId === "") {
           throw new Error("A character id is required.");
         }
         return (await vroidHubClient?.loadCharacterPortrait(characterId)) ?? null;
       },
     );
-    ipcMain.handle(
+    handleFromSettings(
       "persona:vroid-select-character",
-      async (event, characterId, characterName) => {
-        requireSettingsSender(event);
+      async (characterId, characterName) => {
         if (!vroidHubAuth?.isConnected()) {
           throw new Error("Connect your VRoid Hub account first.");
         }
@@ -1202,10 +1188,9 @@ if (!app.requestSingleInstanceLock()) {
     // Builds the model's Hub page from bare ids rather than trusting a full
     // URL from the renderer. characterModelPageUrl validates both ids and
     // owns the path's shape, where it can be tested — this handler can't.
-    ipcMain.handle(
+    handleFromSettings(
       "persona:vroid-open-character-page",
-      (event, characterId, characterModelId) => {
-        requireSettingsSender(event);
+      (characterId, characterModelId) => {
         void shell.openExternal(
           characterModelPageUrl(characterId, characterModelId),
         );
@@ -1239,8 +1224,9 @@ if (!app.requestSingleInstanceLock()) {
     // known theme names and never a caller-supplied colour.
     ipcMain.on("persona:settings-set-window-theme", (event, theme) => {
       if (theme !== "dark" && theme !== "light") return;
-      if (!settingsWindow || settingsWindow.isDestroyed()) return;
-      if (event.sender !== settingsWindow.webContents) return;
+      // A send has no reply channel to reject through, so an unexpected sender
+      // is dropped rather than thrown at the main process.
+      if (!isSettingsSender(event)) return;
       const background = settingsWindowBackground(theme);
       settingsWindow.setBackgroundColor(background);
       debugLog("settings window background", theme, background);
