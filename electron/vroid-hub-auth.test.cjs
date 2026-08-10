@@ -175,9 +175,15 @@ test("refreshes an access token automatically once it is close to expiring", asy
   assert.equal(call, 2);
 });
 
+// As above but with an hour left on the access token, so nothing refreshes
+// unless a caller forces it.
+function connectedWithFreshToken(context, onRefresh) {
+  return connectedWithExpiredToken(context, onRefresh, 3600);
+}
+
 // Signs in with an already-expired access token, so the next
 // getValidAccessToken() must refresh and `onRefresh` decides what it gets back.
-async function connectedWithExpiredToken(context, onRefresh) {
+async function connectedWithExpiredToken(context, onRefresh, expiresIn = 0) {
   const { authFilePath } = fixture(context);
   let call = 0;
   const fetchImpl = fakeFetch((params) => {
@@ -187,7 +193,7 @@ async function connectedWithExpiredToken(context, onRefresh) {
         access_token: "access-1",
         refresh_token: "refresh-1",
         token_type: "Bearer",
-        expires_in: 0,
+        expires_in: expiresIn,
       });
     }
     return onRefresh(params, call);
@@ -334,6 +340,58 @@ test("a refresh that lands after disconnect does not restore the session", async
 
   assert.equal(auth.isConnected(), false);
   assert.equal(fs.existsSync(authFilePath), false);
+});
+
+// Revoking the app on hub.vroid.com kills the access token immediately, so
+// expires_at still reads as valid and no refresh is due. Without forceRefresh
+// the API's 401 is a dead end: the session looks connected forever and the
+// user is never told to reconnect.
+test("forceRefresh refreshes a token the clock still considers valid", async (context) => {
+  let refreshes = 0;
+  const { auth } = await connectedWithFreshToken(context, () => {
+    refreshes += 1;
+    return jsonResponse(200, {
+      access_token: "access-2",
+      refresh_token: "refresh-2",
+      token_type: "Bearer",
+      expires_in: 3600,
+    });
+  });
+
+  assert.equal((await auth.getValidAccessToken()).accessToken, "access-1");
+  assert.equal(refreshes, 0);
+
+  const forced = await auth.getValidAccessToken({ forceRefresh: true });
+  assert.equal(forced.accessToken, "access-2");
+  assert.equal(refreshes, 1);
+});
+
+test("forceRefresh clears the session when the authorization was revoked", async (context) => {
+  const { auth, authFilePath } = await connectedWithFreshToken(context, () =>
+    jsonResponse(400, { error: "invalid_grant" }),
+  );
+
+  await assert.rejects(
+    () => auth.getValidAccessToken({ forceRefresh: true }),
+    /rejected the saved session \(400: invalid_grant\)\. Reconnect your account\./,
+  );
+  assert.equal(auth.isConnected(), false);
+  assert.equal(fs.existsSync(authFilePath), false);
+});
+
+// A forced refresh must not be able to destroy a session over an outage — the
+// 401 that prompted it could just as easily have been a blip.
+test("forceRefresh keeps the session when the token endpoint is down", async (context) => {
+  const { auth, authFilePath } = await connectedWithFreshToken(context, () =>
+    jsonResponse(503, {}),
+  );
+
+  await assert.rejects(
+    () => auth.getValidAccessToken({ forceRefresh: true }),
+    /could not refresh the session right now \(503\)/,
+  );
+  assert.equal(auth.isConnected(), true);
+  assert.equal(fs.existsSync(authFilePath), true);
 });
 
 // Reconnecting without disconnecting first replaces the session under an

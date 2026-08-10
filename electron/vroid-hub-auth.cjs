@@ -255,9 +255,13 @@ function createVroidHubAuth({
     return inFlight;
   }
 
-  async function getValidAccessToken() {
+  // `forceRefresh` is for the case the clock cannot see: revoking this app on
+  // hub.vroid.com kills the access token immediately, long before its
+  // expires_at. Only the API rejecting it reveals that, and only the token
+  // endpoint can then say whether the whole authorization is gone.
+  async function getValidAccessToken({ forceRefresh = false } = {}) {
     if (!tokens) throw new Error("VRoid Hub is not connected.");
-    if (tokens.expires_at - TOKEN_REFRESH_SKEW_MS <= Date.now()) {
+    if (forceRefresh || tokens.expires_at - TOKEN_REFRESH_SKEW_MS <= Date.now()) {
       await refreshTokens();
       // A shared refresh can resolve after disconnect() emptied the session.
       if (!tokens) throw new Error("VRoid Hub is not connected.");
