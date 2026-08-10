@@ -12,13 +12,6 @@ const PENDING_FLOW_TIMEOUT_MS = 10 * 60 * 1000;
 const TOKEN_REFRESH_SKEW_MS = 60 * 1000;
 const DEFAULT_EXPIRES_IN_SECONDS = 60 * 60;
 const TOKEN_REQUEST_TIMEOUT_MS = 15 * 1000;
-// The only statuses that mean the refresh token itself is dead: per RFC 6749
-// §5.2 the token endpoint reports every protocol-level rejection as a 400, or
-// a 401 for bad client credentials. Rate limits (429), outages (5xx), and WAF
-// challenges (403) leave it perfectly usable — and since the encrypted token
-// file is its only copy, discarding it there costs a full re-authorization.
-const UNRECOVERABLE_REFRESH_STATUSES = new Set([400, 401]);
-
 function base64UrlEncode(buffer) {
   return buffer
     .toString("base64")
@@ -34,8 +27,8 @@ function tokenRequestHeaders() {
   };
 }
 
-// A failed token response's OAuth `error` code, for the message only. A token
-// endpoint having a bad day can answer with HTML, so this never throws.
+// A failed token response's OAuth `error` code. A token endpoint having a bad
+// day can answer with HTML, so this never throws.
 async function oauthErrorCode(response) {
   try {
     const body = await response.json();
@@ -219,7 +212,11 @@ function createVroidHubAuth({
 
     if (!response.ok) {
       const code = await oauthErrorCode(response);
-      if (UNRECOVERABLE_REFRESH_STATUSES.has(response.status)) {
+      // RFC 6749 uses 400 for several OAuth errors. Only invalid_grant says
+      // this refresh token is no longer usable; clearing the session for an
+      // invalid request, bad client configuration, or malformed response
+      // would destroy the only persisted copy of an otherwise valid token.
+      if (code === "invalid_grant") {
         if (stillCurrent()) {
           tokens = null;
           writeTokens();
@@ -227,6 +224,12 @@ function createVroidHubAuth({
         throw new Error(
           `VRoid Hub rejected the saved session (${response.status}` +
             `${code ? `: ${code}` : ""}). Reconnect your account.`,
+        );
+      }
+      if (code === "invalid_client") {
+        throw new Error(
+          `VRoid Hub rejected Persona's app credentials (${response.status}: invalid_client). ` +
+            "Update them in Settings; your saved account session was preserved.",
         );
       }
       throw new Error(

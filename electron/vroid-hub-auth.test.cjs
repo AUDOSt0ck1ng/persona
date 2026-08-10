@@ -254,7 +254,7 @@ test("clears the session when VRoid Hub rejects the refresh token", async (conte
   assert.equal(fs.existsSync(authFilePath), false);
 });
 
-test("clears the session on a 401 whose body is not JSON", async (context) => {
+test("keeps the session on a 401 whose body is not JSON", async (context) => {
   const { auth, authFilePath } = await connectedWithExpiredToken(context, () => ({
     ok: false,
     status: 401,
@@ -265,10 +265,36 @@ test("clears the session on a 401 whose body is not JSON", async (context) => {
 
   await assert.rejects(
     () => auth.getValidAccessToken(),
-    /rejected the saved session \(401\)/i,
+    /could not refresh the session right now \(401\)/i,
   );
-  assert.equal(auth.isConnected(), false);
-  assert.equal(fs.existsSync(authFilePath), false);
+  assert.equal(auth.isConnected(), true);
+  assert.equal(fs.existsSync(authFilePath), true);
+});
+
+test("keeps the session for an invalid refresh request", async (context) => {
+  const { auth, authFilePath } = await connectedWithExpiredToken(context, () =>
+    jsonResponse(400, { error: "invalid_request" }),
+  );
+
+  await assert.rejects(
+    () => auth.getValidAccessToken(),
+    /could not refresh the session right now \(400: invalid_request\)/i,
+  );
+  assert.equal(auth.isConnected(), true);
+  assert.equal(fs.existsSync(authFilePath), true);
+});
+
+test("keeps the session when the app credentials are rejected", async (context) => {
+  const { auth, authFilePath } = await connectedWithExpiredToken(context, () =>
+    jsonResponse(401, { error: "invalid_client" }),
+  );
+
+  await assert.rejects(
+    () => auth.getValidAccessToken(),
+    /app credentials.*saved account session was preserved/i,
+  );
+  assert.equal(auth.isConnected(), true);
+  assert.equal(fs.existsSync(authFilePath), true);
 });
 
 test("keeps the session when the refresh request never gets a response", async (context) => {
