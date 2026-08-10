@@ -76,6 +76,9 @@ Keep these architectural constraints intact:
   process, shell, or raw-audio access.
 - Renderer navigation and imported media stay within Persona's validated local
   protocols.
+- Settings mutations and VRoid Hub operations stay restricted to the Settings
+  window; both windows share one preload, so new channels register through
+  `electron/settings-ipc.cjs`.
 - The integration and MCP server remain loopback-only and accept bounded,
   validated inputs.
 - MCP tools describe Persona actions, not arbitrary Electron or operating

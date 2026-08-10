@@ -30,7 +30,9 @@ separate authorization design.
 
 The renderer is sandboxed with context isolation and no Node.js integration. A
 restrictive content security policy is applied, renderer popups are denied, and
-navigation outside the local renderer entry is blocked.
+navigation outside the local renderer entry is blocked. The avatar and Settings
+windows share one preload, so settings changes and VRoid Hub operations are
+additionally rejected unless the request comes from the Settings window.
 
 Imported VRM and VRMA files are copied into Persona's per-user application-data
 directory. They are available to the sandboxed renderer only through a local
