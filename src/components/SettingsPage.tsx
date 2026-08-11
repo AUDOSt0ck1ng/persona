@@ -31,6 +31,10 @@ import {
   type ThemePreference,
 } from '../theme';
 import { vroidLicenseRows } from '../vroid-license-fields';
+import {
+  expressionsForModel,
+  type ModelExpressionReport,
+} from '../model-expression-catalog';
 
 type SettingsSection =
   | 'models'
@@ -55,13 +59,21 @@ const LIGHTING_NUMBER_RANGES: Record<
   ambient_intensity: [0, 4],
 };
 
-const EXPRESSION_OPTIONS: PersonaExpressionName[] = [
-  'happy',
-  'angry',
-  'sad',
-  'relaxed',
-  'surprised',
-];
+const SYSTEM_EXPRESSION_NAMES = new Set([
+  'neutral',
+  'aa',
+  'ih',
+  'ou',
+  'ee',
+  'oh',
+  'blink',
+  'blinkLeft',
+  'blinkRight',
+  'lookUp',
+  'lookDown',
+  'lookLeft',
+  'lookRight',
+]);
 
 interface ConfirmationRequest {
   confirmLabel: string;
@@ -321,10 +333,17 @@ function expressionWeightFrom(input: HTMLInputElement): number | null {
 function ExpressionFields({
   metadata,
   onChange,
+  availableExpressions,
 }: {
   metadata: CustomAnimationMetadata;
   onChange: (patch: Partial<CustomAnimationMetadata>) => void;
+  availableExpressions: readonly string[];
 }) {
+
+  const expressionOptions = availableExpressions.filter(
+    (expression) => !SYSTEM_EXPRESSION_NAMES.has(expression),
+  );
+
   return (
     <>
       <label>
@@ -332,14 +351,13 @@ function ExpressionFields({
         <select
           onChange={(event) =>
             onChange({
-              expression_name:
-                (event.target.value as PersonaExpressionName) || null,
+              expression_name: event.target.value || null,
             })
           }
           value={metadata.expression_name ?? ''}
         >
           <option value="">None</option>
-          {EXPRESSION_OPTIONS.map((expression) => (
+          {expressionOptions.map((expression) => (
             <option key={expression} value={expression}>
               {expression}
             </option>
@@ -506,6 +524,8 @@ export function SettingsPage() {
   );
   const [previewAnimation, setPreviewAnimation] =
     useState<PersonaAnimationSettings | null>(null);
+  const [expressionReport, setExpressionReport] =
+    useState<ModelExpressionReport | null>(null);
   const [previewClipId, setPreviewClipId] = useState<string | null>(null);
   const [previewRequest, setPreviewRequest] = useState(0);
   const [modelName, setModelName] = useState('');
@@ -660,6 +680,16 @@ export function SettingsPage() {
     settings.models.find((model) => model.id === selectedModelId) ??
     settings.models.find((model) => model.id === settings.default_model_id) ??
     settings.models[0];
+  const availableExpressions = expressionsForModel(
+    expressionReport,
+    selectedModel?.asset_url ?? null,
+  );
+  const handleExpressionsChange = useCallback(
+    (modelUrl: string, expressions: readonly string[]) => {
+      setExpressionReport({ modelUrl, expressions });
+    },
+    [],
+  );
 
   const customModelCount = settings.models.filter(
     (model) => model.origin === 'user',
@@ -2135,6 +2165,7 @@ export function SettingsPage() {
                           ...patch,
                         }))
                       }
+                      availableExpressions={availableExpressions}
                     />
                   </div>
                   <div className="form-actions">
@@ -2232,6 +2263,7 @@ export function SettingsPage() {
                         ...patch,
                       }))
                     }
+                    availableExpressions={availableExpressions}
                   />
                 </div>
                 <button
@@ -3541,6 +3573,7 @@ export function SettingsPage() {
                   fallbackAnimationUrls={idleAnimationUrls}
                   expressionName={previewExpression.expressionName}
                   expressionWeight={previewExpression.expressionWeight}
+                  onExpressionsChange={handleExpressionsChange}
                   audioLevel={0}
                   bodySpeaking={previewType === 'TALK'}
                   characterSize={settings.character_size}
