@@ -229,7 +229,9 @@ Otherwise the feature stays disabled rather than storing either in plaintext.
 With no credentials configured, "Connect VRoid Hub account" in Settings stays
 disabled. When configured, Settings opens the VRoid Hub authorization page in
 your system browser (PKCE + confidential client), then lists characters the
-signed-in account owns or has hearted and marked available to other users.
+signed-in account owns, plus the ones it has hearted whose creator marked
+them available to other users, under separate "Your models" and "Hearted
+models" headings.
 Selecting one fetches its VRM bytes through VRoid Hub's licensed
 `download_licenses` flow and holds them in memory for the running session —
 Persona does not write a hub-sourced model to disk as an ordinary, freely

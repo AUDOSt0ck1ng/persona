@@ -781,7 +781,8 @@ button {
 /* --- Badges -------------------------------------------------------------- */
 
 .file-pill,
-.default-badge {
+.default-badge,
+.count-badge {
   display: inline-flex;
   align-items: center;
   height: 22px;
@@ -800,6 +801,12 @@ button {
   border-color: var(--accent-border);
   color: var(--accent-text);
   background: var(--accent-soft);
+}
+
+.count-badge {
+  height: 20px;
+  padding: 0 7px;
+  color: var(--text-tertiary);
 }
 
 /* --- Fields -------------------------------------------------------------- */
@@ -1095,6 +1102,30 @@ button {
   min-height: 40px;
   padding: 6px 10px;
   border-top: 1px solid var(--border);
+}
+
+/* --- VRoid Hub character groups ------------------------------------------ */
+
+.vroid-character-group {
+  margin-top: 22px;
+}
+
+.vroid-character-group > h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  letter-spacing: -0.004em;
+}
+
+.vroid-character-group > .desktop-note {
+  margin-top: 0;
+}
+
+.vroid-character-group > .desktop-note + .asset-grid {
+  margin-top: 12px;
 }
 
 /* --- Animation action cards ---------------------------------------------- */
