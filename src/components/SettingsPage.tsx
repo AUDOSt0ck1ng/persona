@@ -170,6 +170,83 @@ function VroidCharacterPortrait({
   );
 }
 
+function VroidCharacterCard({
+  busy,
+  character,
+  onSelect,
+  portraitEpoch,
+}: {
+  busy: boolean;
+  character: PersonaVroidHubCharacter;
+  onSelect: () => void;
+  // Used as the portrait's key: a refresh remounts it to retry a failed load.
+  portraitEpoch: number;
+}) {
+  return (
+    <article className="asset-card">
+      <VroidCharacterPortrait character={character} key={portraitEpoch} />
+      <span className="asset-card-main">
+        <span>
+          <strong>{character.name}</strong>
+          <small>
+            {character.is_downloadable ? 'Downloadable on Hub' : 'Hub only'}
+          </small>
+        </span>
+      </span>
+      <div className="asset-card-footer">
+        <button disabled={busy} onClick={onSelect} type="button">
+          Use this character
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function VroidCharacterGroup({
+  busy,
+  characters,
+  emptyNote,
+  note,
+  onSelect,
+  portraitEpoch,
+  title,
+}: {
+  busy: boolean;
+  characters: PersonaVroidHubCharacter[];
+  emptyNote: string;
+  note?: string;
+  onSelect: (character: PersonaVroidHubCharacter) => void;
+  portraitEpoch: number;
+  title: string;
+}) {
+  return (
+    <div className="vroid-character-group">
+      <h3>
+        {title}
+        <span className="count-badge">{characters.length}</span>
+      </h3>
+      {characters.length === 0 ? (
+        <p className="desktop-note">{emptyNote}</p>
+      ) : (
+        <>
+          {note && <p className="desktop-note">{note}</p>}
+          <div className="asset-grid">
+            {characters.map((character) => (
+              <VroidCharacterCard
+                busy={busy}
+                character={character}
+                key={character.id}
+                onSelect={() => onSelect(character)}
+                portraitEpoch={portraitEpoch}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function vroidConditionsOfUse(
   character: PersonaVroidHubCharacter,
   onOpenHubPage: (() => void) | null,
@@ -646,6 +723,17 @@ export function SettingsPage() {
     if (vroidStatus?.connected) void refreshVroidCharacters();
     else setVroidCharacters(null);
   }, [vroidStatus?.connected, refreshVroidCharacters]);
+
+  const ownVroidCharacters = useMemo(
+    () => vroidCharacters?.filter((character) => character.origin === 'own') ?? [],
+    [vroidCharacters],
+  );
+  const heartedVroidCharacters = useMemo(
+    () =>
+      vroidCharacters?.filter((character) => character.origin === 'hearted') ??
+      [],
+    [vroidCharacters],
+  );
 
   useEffect(() => {
     setVoiceMode(settings.voice_source.mode);
@@ -1844,48 +1932,41 @@ export function SettingsPage() {
                 )}
                 {vroidHubBridge && vroidStatus?.connected && (
                   <>
-                    <div className="asset-grid">
-                      {vroidLoading && <p>Loading your characters…</p>}
-                      {!vroidLoading && vroidCharacters?.length === 0 && (
-                        <div className="empty-library">
-                          <strong>No characters available yet</strong>
-                          <p>
-                            Mark a character available to other users on
-                            VRoid Hub, or heart one that already is, then
-                            refresh.
-                          </p>
-                        </div>
-                      )}
-                      {vroidCharacters?.map((character) => (
-                        <article className="asset-card" key={character.id}>
-                          <VroidCharacterPortrait
-                            character={character}
-                            key={vroidPortraitEpoch}
-                          />
-                          <span className="asset-card-main">
-                            <span>
-                              <strong>{character.name}</strong>
-                              <small>
-                                {character.is_downloadable
-                                  ? 'Downloadable on Hub'
-                                  : 'Hub only'}
-                              </small>
-                            </span>
-                          </span>
-                          <div className="asset-card-footer">
-                            <button
-                              disabled={busy}
-                              onClick={() =>
-                                void selectVroidCharacter(character)
-                              }
-                              type="button"
-                            >
-                              Use this character
-                            </button>
-                          </div>
-                        </article>
-                      ))}
-                    </div>
+                    {vroidLoading && <p>Loading your characters…</p>}
+                    {/* Neither branch below is gated on !vroidLoading: a
+                        refresh returns what's already on screen, so leaving it
+                        up avoids collapsing the panel under the user. */}
+                    {vroidCharacters?.length === 0 && (
+                      <div className="empty-library">
+                        <strong>No characters available yet</strong>
+                        <p>
+                          Upload a model to VRoid Hub, or heart one that its
+                          creator marked available to other users, then
+                          refresh.
+                        </p>
+                      </div>
+                    )}
+                    {(vroidCharacters?.length ?? 0) > 0 && (
+                      <>
+                        <VroidCharacterGroup
+                          busy={busy}
+                          characters={ownVroidCharacters}
+                          emptyNote="You haven’t uploaded any models to VRoid Hub yet."
+                          onSelect={selectVroidCharacter}
+                          portraitEpoch={vroidPortraitEpoch}
+                          title="Your models"
+                        />
+                        <VroidCharacterGroup
+                          busy={busy}
+                          characters={heartedVroidCharacters}
+                          emptyNote="Heart a model another creator marked available to other users and it shows up here."
+                          note="These belong to other creators. Persona asks you to confirm a model’s conditions of use before it downloads one."
+                          onSelect={selectVroidCharacter}
+                          portraitEpoch={vroidPortraitEpoch}
+                          title="Hearted models"
+                        />
+                      </>
+                    )}
                     <div className="form-actions">
                       <button
                         className="secondary-button"
