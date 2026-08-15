@@ -1,4 +1,5 @@
 import js from '@eslint/js';
+import stylistic from '@stylistic/eslint-plugin';
 import globals from 'globals';
 import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
@@ -17,8 +18,11 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
+    plugins: {
+      '@stylistic': stylistic,
+    },
     rules: {
-      'eol-last': ['error', 'always'],
+      '@stylistic/eol-last': ['error', 'always'],
     },
   },
   {
