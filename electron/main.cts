@@ -69,6 +69,11 @@ import {
 } from './audio-listener.cjs';
 import { listVoiceSources } from './voice-source-discovery.cjs';
 import { isAllowedRendererNavigation } from './navigation-policy.cjs';
+import {
+  drainRendererEventsForLoad,
+  PendingRendererEvents,
+} from './renderer-event-queue.cjs';
+import { reconcileHeldExpression as reconcileHold } from './expression-hold.cjs';
 import { createSettingsIpcGate } from './settings-ipc.cjs';
 import { snapshotHasConfiguredModel } from './model-readiness.cjs';
 import { parseProtocolUrl, voiceState } from './protocol-actions.cjs';
@@ -87,6 +92,13 @@ import type {
   VoiceState,
 } from './types.cjs';
 import { isRecord } from './types.cjs';
+
+// Derived rather than imported so it cannot drift from the union the renderer
+// actually receives.
+type ExpressionHoldEvent = Extract<
+  AvatarRendererEvent,
+  { type: 'expression-hold' }
+>;
 
 type WindowTheme = keyof typeof SETTINGS_WINDOW_BACKGROUND;
 type AssetKind = 'model' | 'animation';
@@ -111,6 +123,10 @@ const SETTINGS_WINDOW_BACKGROUND = {
   light: "#e6e8ec",
 };
 const PERSONA_ASSET_SCHEME = "persona-asset";
+// An integration that crashes, is killed, or simply forgets to send
+// expression-release would otherwise leave the character's face frozen with no
+// way for the user to recover it. Drop a held expression after this long.
+const EXPRESSION_HOLD_TIMEOUT_MS = 5 * 60_000;
 const startInBackground = process.argv.includes("--background");
 const startInSettings = process.argv.includes("--settings");
 const protocolScheme = "persona";
@@ -136,7 +152,6 @@ let hyprlandConfiguring = false;
 let hyprlandConfigurationTimer: NodeJS.Timeout | null = null;
 let hyprlandLastPosition: WindowPosition | null = null;
 let hyprlandConfigurationGeneration = 0;
-let rendererLoadHookAttached = false;
 let animationCommandRequestId = 0;
 let modelConfigured = false;
 let mcpServerError: string | null = null;
@@ -145,7 +160,16 @@ let mcpServerPort = Number(
   process.env.PERSONA_BRIDGE_PORT || DEFAULT_PORT,
 );
 let mcpAnimationCatalogSignature: string | null = null;
-const pendingRendererEvents = new Map<AvatarRendererEvent['type'], AvatarRendererEvent>();
+// The hold is kept whole, not just as a resolved expression name: the source
+// action and model are what a settings change has to be reconciled against,
+// and the event is what a freshly loaded renderer has to be re-sent.
+let heldExpression: {
+  animationName: string;
+  modelId: string | null;
+  event: ExpressionHoldEvent;
+} | null = null;
+let heldExpressionTimer: NodeJS.Timeout | null = null;
+const pendingRendererEvents = new PendingRendererEvents();
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -284,13 +308,13 @@ async function hideOverlay(): Promise<void> {
 }
 
 function destroyOverlayForSetup(): void {
+  releaseHeldExpression("reset");
   clearHyprlandConfigurationTimer();
   hyprlandConfigurationGeneration += 1;
   hyprlandConfigurationTimer = null;
   hyprlandConfigured = false;
   hyprlandConfiguring = false;
   hyprlandLastPosition = null;
-  rendererLoadHookAttached = false;
   pendingRendererEvents.clear();
   if (avatarWindow && !avatarWindow.isDestroyed()) {
     avatarWindow.destroy();
@@ -394,9 +418,12 @@ function createWindow(): BrowserWindow {
     clearHyprlandConfigurationTimer();
     hyprlandConfigured = false;
     hyprlandConfiguring = false;
-    rendererLoadHookAttached = false;
     avatarWindow = null;
   });
+
+  // Every load needs the flush, including reloads and loads during which no
+  // event happened to arrive: a held expression has to be restored either way.
+  window.webContents.on("did-finish-load", flushPendingRendererEvents);
 
   const avatarRendererUrl = rendererUrl();
   secureRendererWindow(window, avatarRendererUrl);
@@ -499,6 +526,7 @@ function publishSettings(snapshot: SettingsSnapshot): SettingsSnapshot {
     }
   }
   refreshTrayMenu();
+  reconcileHeldExpression(snapshot);
   if (!wasConfigured && modelConfigured) {
     void audioListener?.start();
     showOverlay();
@@ -777,6 +805,78 @@ function playConfiguredAnimation(animationName: string): boolean {
   return true;
 }
 
+function clearHeldExpressionTimer(): void {
+  if (heldExpressionTimer) {
+    clearTimeout(heldExpressionTimer);
+    heldExpressionTimer = null;
+  }
+}
+
+// Releasing when nothing is held is a no-op rather than an error: an
+// integration that lost track of its own state should be able to send
+// expression-release blindly and end up in the default lifecycle.
+function releaseHeldExpression(
+  reason: "integration" | "timeout" | "reset" | "settings",
+): void {
+  clearHeldExpressionTimer();
+  if (heldExpression == null) return;
+  debugLog("expression release", {
+    expression: heldExpression.event.expressionName,
+    reason,
+  });
+  heldExpression = null;
+  // A reset destroys the overlay and clears the pending queue on the next
+  // statement, so there is no renderer left to tell.
+  if (reason !== "reset") handleBridgeEvent({ type: "expression-release" });
+}
+
+// Unlike playConfiguredAnimation this deliberately does not require
+// asset_urls: holding an expression never plays the VRMA, so an action whose
+// clips are missing can still contribute its configured expression.
+function holdConfiguredExpression(animationName: string): boolean {
+  if (!hasConfiguredModel()) return false;
+  const installedAnimation = settingsStore?.getAnimation(animationName);
+  if (installedAnimation == null || !installedAnimation.expression_name) {
+    return false;
+  }
+  clearHeldExpressionTimer();
+  const event: ExpressionHoldEvent = {
+    type: "expression-hold",
+    expressionName: installedAnimation.expression_name,
+    expressionWeight: installedAnimation.expression_weight,
+  };
+  heldExpression = {
+    animationName,
+    modelId: settingsStore?.getSnapshot()?.default_model_id ?? null,
+    event,
+  };
+  heldExpressionTimer = setTimeout(
+    () => releaseHeldExpression("timeout"),
+    EXPRESSION_HOLD_TIMEOUT_MS,
+  );
+  heldExpressionTimer.unref?.();
+  handleBridgeEvent(event);
+  return true;
+}
+
+// Editing or deleting the held action, or switching models, can leave the
+// renderer showing an expression the configuration no longer describes.
+function reconcileHeldExpression(snapshot: SettingsSnapshot): void {
+  if (heldExpression == null) return;
+  const outcome = reconcileHold(
+    {
+      animationName: heldExpression.animationName,
+      modelId: heldExpression.modelId,
+      expressionName: heldExpression.event.expressionName,
+      expressionWeight: heldExpression.event.expressionWeight ?? 1,
+    },
+    snapshot,
+  );
+  if (outcome === "keep") return;
+  debugLog("expression hold invalidated", { outcome });
+  releaseHeldExpression("settings");
+}
+
 function selectAssetFile(kind: AssetKind, multiple: true): Promise<string[]>;
 function selectAssetFile(
   kind: AssetKind,
@@ -806,37 +906,23 @@ async function selectAssetFile(
 }
 
 function flushPendingRendererEvents(): void {
-  rendererLoadHookAttached = false;
   if (!avatarWindow || avatarWindow.isDestroyed() || avatarWindow.webContents.isLoading()) return;
-  for (const event of pendingRendererEvents.values()) {
+  for (const event of drainRendererEventsForLoad(
+    pendingRendererEvents,
+    heldExpression?.event ?? null,
+  )) {
     avatarWindow.webContents.send("persona:event", event);
   }
-  pendingRendererEvents.clear();
-}
-
-function ensureRendererLoadHook(): void {
-  if (
-    rendererLoadHookAttached ||
-    !avatarWindow ||
-    avatarWindow.isDestroyed() ||
-    !avatarWindow.webContents.isLoading()
-  ) {
-    return;
-  }
-  rendererLoadHookAttached = true;
-  avatarWindow.webContents.once("did-finish-load", flushPendingRendererEvents);
 }
 
 function emitToRenderer(event: AvatarRendererEvent): void {
   latestEvent = event;
-  pendingRendererEvents.set(event.type, event);
+  const pendingKey = pendingRendererEvents.add(event);
   if (!avatarWindow || avatarWindow.isDestroyed()) return;
-  if (avatarWindow.webContents.isLoading()) {
-    ensureRendererLoadHook();
-    return;
-  }
+  // The did-finish-load listener will flush whatever is queued here.
+  if (avatarWindow.webContents.isLoading()) return;
   avatarWindow.webContents.send("persona:event", event);
-  pendingRendererEvents.delete(event.type);
+  pendingRendererEvents.delete(pendingKey);
 }
 
 function handleBridgeEvent(event: AvatarRendererEvent): void {
@@ -865,6 +951,13 @@ function handleBridgeEvent(event: AvatarRendererEvent): void {
 function handleIntegrationEvent(event: IntegrationEvent): boolean {
   if (event.type === "animation-command") {
     return playConfiguredAnimation(event.animationName);
+  }
+  if (event.type === "expression-hold-command") {
+    return holdConfiguredExpression(event.animationName);
+  }
+  if (event.type === "expression-release-command") {
+    releaseHeldExpression("integration");
+    return true;
   }
   handleBridgeEvent(event);
   return true;

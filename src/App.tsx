@@ -49,6 +49,10 @@ export function App() {
   const [voiceAnimation, setVoiceAnimation] = useState<AnimationType>('IDLE');
   const [bodyOverride, setBodyOverride] =
     useState<BodyAnimationOverride | null>(null);
+  const [heldExpression, setHeldExpression] = useState<{
+    name: PersonaExpressionName;
+    weight: number;
+  } | null>(null);
   const [settings, setSettings] =
     useState<PersonaSettingsSnapshot>(SETTINGS_FALLBACK);
 
@@ -73,6 +77,13 @@ export function App() {
         if (event.level > BODY_SPEECH_LEVEL_THRESHOLD) {
           setVoiceAnimation('TALK');
         }
+      } else if (event.type === 'expression-hold') {
+        setHeldExpression({
+          name: event.expressionName,
+          weight: event.expressionWeight ?? 1,
+        });
+      } else if (event.type === 'expression-release') {
+        setHeldExpression(null);
       } else if (event.type === 'animation') {
         if (event.requestId != null) {
           setBodyOverride({
@@ -141,6 +152,13 @@ export function App() {
     ],
     [settings.animations],
   );
+  // A held expression outranks the expression a newly started action carries,
+  // so an action that begins mid-hold plays its body animation without
+  // touching the face. Name and weight are read off the same object so the two
+  // can never be paired from different expressions.
+  const expressionName = heldExpression?.name ?? bodyOverride?.expressionName;
+  const expressionWeight =
+    heldExpression?.weight ?? bodyOverride?.expressionWeight;
   const overrideRequestId = bodyOverride?.requestId ?? null;
   const handleAnimationComplete = useCallback(() => {
     if (overrideRequestId == null) return;
@@ -157,8 +175,8 @@ export function App() {
         animationUrls={animationUrls}
         fallbackAnimationUrls={idleAnimationUrls}
         preloadAnimationUrls={preloadAnimationUrls}
-        expressionName={bodyOverride?.expressionName}
-        expressionWeight={bodyOverride?.expressionWeight}
+        expressionName={expressionName}
+        expressionWeight={expressionWeight}
         audioLevel={audioLevel}
         bodySpeaking={bodySpeaking}
         characterSize={settings.character_size}
