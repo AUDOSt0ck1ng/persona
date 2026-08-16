@@ -136,9 +136,11 @@ test("main registers every settings and VRoid Hub channel behind the gate", () =
     "every ipcMain registration must name its channel as a literal",
   );
   assert.deepEqual(ungated, [
+    "persona:get-click-through",
     "persona:get-snapshot",
     "persona:hide",
     "persona:move-by",
+    "persona:set-mouse-passthrough",
     "persona:settings-get",
     "persona:settings-set-window-theme",
   ]);
@@ -146,6 +148,13 @@ test("main registers every settings and VRoid Hub channel behind the gate", () =
     source.slice(source.indexOf('ipcMain.on("persona:settings-set-window-theme"')),
     /^[^)]*\)[\s\S]{0,600}?isSettingsSender\(event\)/,
     "the one ungated settings channel must still check its sender by hand",
+  );
+  // Passthrough drives a window flag the user cannot see changing, so only the
+  // avatar renderer may reach it.
+  assert.match(
+    source.slice(source.indexOf('ipcMain.on("persona:set-mouse-passthrough"')),
+    /^[^)]*\)[\s\S]{0,600}?event\.sender !== avatarWindow\.webContents/,
+    "the passthrough channel must check its sender by hand",
   );
   assert.ok(
     gated.filter((channel) => channel.startsWith("persona:settings-")).length >

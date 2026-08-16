@@ -46,6 +46,10 @@ export function App() {
   const [voice, setVoice] = useState<VoiceState>(INITIAL_STATE);
   const [audioLevel, setAudioLevel] = useState(0);
   const [hasObservedAudioLevel, setHasObservedAudioLevel] = useState(false);
+  // The main process owns whether the window floats over the desktop, so the
+  // silhouette hit-test stays off until it says otherwise. Whole-window mode
+  // needs no help from the renderer, which never sees the mouse there anyway.
+  const [silhouetteHitTest, setSilhouetteHitTest] = useState(false);
   const [voiceAnimation, setVoiceAnimation] = useState<AnimationType>('IDLE');
   const [bodyOverride, setBodyOverride] =
     useState<BodyAnimationOverride | null>(null);
@@ -61,6 +65,12 @@ export function App() {
     if (!bridge) return;
     void bridge.getSnapshot().then((event) => {
       if (event?.type === 'state') setVoice(event.state);
+    });
+    // Pulled rather than awaited as an event, so a reload or a push that landed
+    // before this listener existed still leaves the renderer in step with the
+    // window's actual flags.
+    void bridge.getClickThrough().then((state) => {
+      setSilhouetteHitTest(state.enabled && state.mode === 'silhouette');
     });
     return bridge.subscribe((event) => {
       if (event.type === 'state') {
@@ -97,6 +107,8 @@ export function App() {
         } else if (event.animation !== 'CUSTOM') {
           setVoiceAnimation(event.animation);
         }
+      } else if (event.type === 'click-through') {
+        setSilhouetteHitTest(event.enabled && event.mode === 'silhouette');
       }
     });
   }, []);
@@ -180,6 +192,7 @@ export function App() {
         audioLevel={audioLevel}
         bodySpeaking={bodySpeaking}
         characterSize={settings.character_size}
+        silhouetteHitTest={silhouetteHitTest}
         dragInertia={dragInertia}
         lighting={settings.model_lighting[defaultModel.id]}
         modelUrl={defaultModel.asset_url}
