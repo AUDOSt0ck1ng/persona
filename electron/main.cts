@@ -949,11 +949,14 @@ function emitClickThrough(): void {
 
 // Changing the mouse-ignore flags drops the window out of the always-on-top
 // band, so the app behind it covers the avatar the moment a click passes
-// through. Re-assert the level with every change; the only call sites that
-// touch these flags are here.
+// through. Re-assert the level with every change, and the workspace visibility
+// with it: setting the level is what disturbs that too, which is why the two
+// travel together everywhere else in this file. The only call sites that touch
+// these flags are here.
 function applyMouseIgnore(window: BrowserWindow, flags: MouseIgnoreFlags): void {
   window.setIgnoreMouseEvents(flags.ignore, { forward: flags.forward });
   window.setAlwaysOnTop(true, "floating");
+  window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 }
 
 function applyClickThroughFlags(window: BrowserWindow): void {

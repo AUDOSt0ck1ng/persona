@@ -203,6 +203,14 @@ function PassthroughController({ enabled }: { enabled: boolean }) {
       // A render into an offscreen target is not the frame the user sees.
       if (gl.getRenderTarget() !== null) return;
       pending = false;
+      // A gesture keeps the window regardless of what is under the cursor, so
+      // the answer is known without the pixel. Reading it anyway would stall
+      // the pipeline once per frame of a drag, which is the motion that most
+      // needs the frames.
+      if (gestureActive) {
+        apply(false);
+        return;
+      }
       const pixel = drawingBufferPixel(
         canvas.getBoundingClientRect(),
         { width: canvas.width, height: canvas.height },
@@ -210,10 +218,10 @@ function PassthroughController({ enabled }: { enabled: boolean }) {
         clientY,
       );
       if (!pixel) {
-        // A drag can carry the cursor off the window, and there is no pixel to
-        // read out there. Nothing outside the canvas is ever drawn, so decide
-        // rather than leave the last decision standing.
-        apply(!gestureActive);
+        // The cursor is outside the canvas and there is no pixel to read out
+        // there. Nothing outside it is ever drawn, so decide rather than leave
+        // the last decision standing.
+        apply(true);
         return;
       }
       context.readPixels(
