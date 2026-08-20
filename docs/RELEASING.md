@@ -67,8 +67,10 @@ Treat signed and notarized artifacts as the production release path.
    - transparent background and always-on-top behavior;
    - click-through starting off, then on Windows and macOS passing clicks to the
      desktop around the character while the character itself still orbits and
-     drags, on Linux passing the whole window through, and the tray toggle
-     restoring a fully interactive window on either; and
+     drags, on Linux passing the whole window through, the tray toggle and
+     Settings → Appearance agreeing in both directions, the tray toggle
+     restoring a fully interactive window on either platform, and the choice
+     surviving a restart; and
    - uninstall.
 
 ## Tag and release

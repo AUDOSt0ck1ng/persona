@@ -972,6 +972,11 @@ function setClickThroughEnabled(enabled: boolean): void {
   }
   emitClickThrough();
   refreshTrayMenu();
+  // The tray toggle and the Settings control both land here, so the stored
+  // choice cannot drift from the flags the window is actually wearing.
+  if (settingsStore) {
+    publishSettings(settingsStore.setClickThroughEnabled(enabled));
+  }
 }
 
 function handleBridgeEvent(event: AvatarRendererEvent): void {
@@ -1090,7 +1095,20 @@ function refreshTrayMenu(): void {
               : "Click-through (whole window)",
           type: "checkbox",
           checked: clickThrough.isEnabled(),
-          click: (item) => setClickThroughEnabled(item.checked),
+          // The Settings control reaches setClickThroughEnabled through an IPC
+          // handler that turns a failed write into a notice; a menu callback
+          // has nowhere to reject to, and the flags have already changed by
+          // then, so a disk failure here must not take the process down.
+          click: (item) => {
+            try {
+              setClickThroughEnabled(item.checked);
+            } catch (error) {
+              console.error(
+                "[persona] could not save the click-through choice:",
+                error,
+              );
+            }
+          },
         },
         { type: "separator" },
         quitItem,
@@ -1150,6 +1168,9 @@ if (!app.requestSingleInstanceLock()) {
     settingsStore = store;
     const initialSettingsSnapshot = store.getSnapshot();
     modelConfigured = snapshotHasConfiguredModel(initialSettingsSnapshot);
+    // Seeded before the avatar window is created, so its first flags already
+    // match the stored choice rather than flipping once something notices.
+    clickThrough.setEnabled(initialSettingsSnapshot.click_through_enabled);
     mcpAnimationCatalogSignature = animationCatalogSignature(
       initialSettingsSnapshot,
     );
@@ -1288,6 +1309,19 @@ if (!app.requestSingleInstanceLock()) {
         );
         applyAvatarWindowSize();
         return snapshot;
+      },
+    );
+    // Derived from the platform rather than stored, so Settings reads it apart
+    // from the snapshot and the rule stays in one place.
+    handleFromSettings(
+      "persona:settings-get-click-through-mode",
+      () => clickThrough.mode,
+    );
+    handleFromSettings(
+      "persona:settings-set-click-through",
+      (enabled: unknown) => {
+        setClickThroughEnabled(enabled === true);
+        return store.getSnapshot();
       },
     );
     handleFromSettings(

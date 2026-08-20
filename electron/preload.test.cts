@@ -81,7 +81,8 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
     'get', 'importModel', 'createAnimation', 'addAnimationClips',
     'updateAnimation', 'deleteAnimation', 'deleteAnimationClip',
     'resetPackagedAnimations', 'deleteModel', 'setDefaultModel',
-    'setCharacterSize', 'setAvatarWindowSize', 'setSpeakingTransition',
+    'setCharacterSize', 'setAvatarWindowSize', 'getClickThroughMode',
+    'setClickThroughEnabled', 'setSpeakingTransition',
     'setBodyTransitionMs', 'setSpeakingDebounceMs', 'setIdleInterimMs',
     'enableDeveloperSettings', 'resetDeveloperSettings',
     'setVroidHubPlaintextStorageAllowed', 'setVoiceSource',
@@ -123,6 +124,8 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
   await settings.setDefaultModel("model-id");
   await settings.setCharacterSize(1.2);
   await settings.setAvatarWindowSize(900, 1200);
+  await settings.getClickThroughMode();
+  await settings.setClickThroughEnabled(true);
   await settings.setSpeakingTransition({
     entry_ms: [720, 720],
     exit_ms: [765, 765],
@@ -190,6 +193,8 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
     ["persona:settings-set-default-model", "model-id"],
     ["persona:settings-set-character-size", 1.2],
     ["persona:settings-set-avatar-window-size", 900, 1200],
+    ["persona:settings-get-click-through-mode"],
+    ["persona:settings-set-click-through", true],
     [
       "persona:settings-set-speaking-transition",
       { entry_ms: [720, 720], exit_ms: [765, 765] },

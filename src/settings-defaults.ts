@@ -151,6 +151,7 @@ export const SETTINGS_FALLBACK: PersonaSettingsSnapshot = {
   default_model_id: null,
   character_size: 1,
   avatar_window: { ...DEFAULT_AVATAR_WINDOW_SIZE },
+  click_through_enabled: false,
   developer_settings_enabled: false,
   vroid_hub_allow_plaintext_storage: false,
   body_transition_ms: DEFAULT_BODY_TRANSITION_MS,

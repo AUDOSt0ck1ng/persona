@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  clickThroughCopy,
   drawingBufferPixel,
   passthroughForAlpha,
   SILHOUETTE_ALPHA_THRESHOLD,
@@ -62,5 +63,26 @@ describe('silhouette alpha test', () => {
   it('never releases the mouse mid-gesture', () => {
     expect(passthroughForAlpha({ alpha: 0, gestureActive: true })).toBe(false);
     expect(passthroughForAlpha({ alpha: 255, gestureActive: true })).toBe(false);
+  });
+});
+
+describe('settings copy', () => {
+  it('describes what stays clickable in each mode', () => {
+    expect(clickThroughCopy('silhouette').description).toContain(
+      'around the character',
+    );
+    expect(clickThroughCopy('whole-window').description).toContain(
+      'including the character',
+    );
+  });
+
+  it('carries the Linux caveat only where forwarding is unavailable', () => {
+    expect(clickThroughCopy('silhouette').note).not.toContain('Experimental');
+    expect(clickThroughCopy('whole-window').note).toContain('Experimental');
+  });
+
+  it('points at the tray toggle from either mode', () => {
+    expect(clickThroughCopy('silhouette').note).toContain('tray menu');
+    expect(clickThroughCopy('whole-window').note).toContain('tray menu');
   });
 });

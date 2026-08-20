@@ -33,6 +33,7 @@ declare global {
     PersonaApi.PersonaVroidHubCharacterLicense;
   type PersonaVroidHubCharacter = PersonaApi.PersonaVroidHubCharacter;
   type AvatarBridgeEvent = PersonaApi.AvatarRendererEvent;
+  type ClickThroughMode = PersonaApi.ClickThroughMode;
 
   interface Window {
     personaBridge?: PersonaApi.PersonaBridgeApi;

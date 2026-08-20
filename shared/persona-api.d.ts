@@ -188,6 +188,7 @@ export interface PersonaSettingsSnapshot {
   default_model_id: string | null;
   character_size: number;
   avatar_window: PersonaAvatarWindowSize;
+  click_through_enabled: boolean;
   developer_settings_enabled: boolean;
   vroid_hub_allow_plaintext_storage: boolean;
   body_transition_ms: number;
@@ -315,6 +316,13 @@ export interface PersonaSettingsApi {
     width: number,
     height: number,
   ): Promise<PersonaSettingsSnapshot>;
+  /**
+   * The mode the running platform can offer. Derived from the platform rather
+   * than stored, so it is read separately from the snapshot that persists
+   * whether click-through is on.
+   */
+  getClickThroughMode(): Promise<ClickThroughMode>;
+  setClickThroughEnabled(enabled: boolean): Promise<PersonaSettingsSnapshot>;
   setSpeakingTransition(
     transition: PersonaSpeakingTransitionSettings,
   ): Promise<PersonaSettingsSnapshot>;

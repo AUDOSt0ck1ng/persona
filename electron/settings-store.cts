@@ -54,6 +54,7 @@ interface SettingsState {
   default_model_id: string | null;
   character_size: number;
   avatar_window: AvatarWindowSize;
+  click_through_enabled: boolean;
   developer_settings_enabled: boolean;
   vroid_hub_allow_plaintext_storage: boolean;
   body_transition_ms: number;
@@ -97,6 +98,7 @@ export interface SettingsStore {
   resolveAssetRequest(rawUrl: string): string | { buffer: Buffer } | null;
   setActiveHubModel(buffer: Buffer, metadata?: { model_name?: unknown }): SettingsSnapshot;
   setAvatarWindowSize(width: unknown, height: unknown): SettingsSnapshot;
+  setClickThroughEnabled(value: unknown): SettingsSnapshot;
   setCharacterSize(value: unknown): SettingsSnapshot;
   setSpeakingTransition(value: unknown): SettingsSnapshot;
   setBodyTransitionMs(value: unknown): SettingsSnapshot;
@@ -304,6 +306,7 @@ function defaultState(packagedLibrary: PackagedLibrary): SettingsState {
     default_model_id: packagedLibrary.default_model_id,
     character_size: 1,
     avatar_window: { ...DEFAULT_AVATAR_WINDOW_SIZE },
+    click_through_enabled: false,
     developer_settings_enabled: false,
     vroid_hub_allow_plaintext_storage: false,
     body_transition_ms: DEFAULT_BODY_TRANSITION_MS,
@@ -700,6 +703,7 @@ function safeReadState(
           : fallback.default_model_id,
       character_size: sanitizeCharacterSize(parsed.character_size),
       avatar_window: sanitizeAvatarWindowSize(parsed.avatar_window),
+      click_through_enabled: parsed.click_through_enabled === true,
       developer_settings_enabled: parsed.developer_settings_enabled === true,
       vroid_hub_allow_plaintext_storage:
         parsed.vroid_hub_allow_plaintext_storage === true,
@@ -971,6 +975,7 @@ export function createSettingsStore({
       default_model_id: defaultModel,
       character_size: state.character_size,
       avatar_window: sanitizeAvatarWindowSize(state.avatar_window),
+      click_through_enabled: state.click_through_enabled === true,
       developer_settings_enabled: state.developer_settings_enabled === true,
       vroid_hub_allow_plaintext_storage:
         state.vroid_hub_allow_plaintext_storage === true,
@@ -1410,6 +1415,12 @@ export function createSettingsStore({
     return getSnapshot();
   }
 
+  function setClickThroughEnabled(value: unknown): SettingsSnapshot {
+    state.click_through_enabled = value === true;
+    writeState();
+    return getSnapshot();
+  }
+
   function setVroidHubPlaintextStorageAllowed(value: unknown): SettingsSnapshot {
     state.vroid_hub_allow_plaintext_storage = value === true;
     writeState();
@@ -1564,6 +1575,7 @@ export function createSettingsStore({
     setActiveHubModel,
     setAvatarWindowSize,
     setCharacterSize,
+    setClickThroughEnabled,
     setSpeakingTransition,
     setBodyTransitionMs,
     setSpeakingDebounceMs,

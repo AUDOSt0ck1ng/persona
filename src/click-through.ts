@@ -59,3 +59,33 @@ export function passthroughForAlpha({
   if (gestureActive) return false;
   return alpha < SILHOUETTE_ALPHA_THRESHOLD;
 }
+
+export interface ClickThroughCopy {
+  description: string;
+  note: string;
+}
+
+const TRAY_RECOVERY =
+  'The tray menu toggles this too, and is the way back to a fully interactive window.';
+
+/**
+ * What the Settings control says about the mode this platform got. The modes
+ * differ in what stays clickable, so one description cannot cover both, and
+ * only the mode without mouse-move forwarding carries the Linux caveat.
+ */
+export function clickThroughCopy(mode: ClickThroughMode): ClickThroughCopy {
+  if (mode === 'silhouette') {
+    return {
+      description:
+        'Clicks land on whatever sits behind the transparent area around the character. The character itself still takes orbit, zoom, and Alt+drag.',
+      note: TRAY_RECOVERY,
+    };
+  }
+  return {
+    description:
+      'Clicks pass through the entire avatar window, including the character. This platform cannot forward mouse moves to a window that ignores clicks, which is what handing input back over the character would need.',
+    note:
+      'Experimental on Linux: it relies on the X11 input shape, and no Wayland compositor has been verified. ' +
+      TRAY_RECOVERY,
+  };
+}

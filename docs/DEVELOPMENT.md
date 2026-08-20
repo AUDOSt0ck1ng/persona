@@ -86,11 +86,17 @@ which is invisible until a click passes through and the app behind it rises over
 the avatar. Every change therefore re-asserts the level, and the flags are only
 ever set in one place so that cannot be missed.
 
-The mode is session state and is deliberately not persisted, so it is not part
-of the settings snapshot and has no Settings window control; every launch starts
-off. The tray toggle applies the new flags immediately rather than waiting for a
-hit-test that may never come, which is what makes it a dependable way back to an
-interactive window.
+Whether click-through is on persists as `click_through_enabled` in the settings
+snapshot, and is seeded into the click-through state before the avatar window
+exists so the window's first flags already match. The mode beside it is not
+stored: it follows the running platform, so Settings reads it through
+`persona:settings-get-click-through-mode` rather than from the snapshot, and the
+rule stays in `clickThroughModeFor` alone. Both the tray toggle and the Settings
+control run through the same `setClickThroughEnabled`, which applies the flags,
+tells the renderer, and writes the store together, so neither entry point can
+leave the other stale. Applying the flags there rather than waiting for a
+hit-test that may never come is what makes the tray toggle a dependable way back
+to an interactive window.
 
 ## Settings and local media
 
@@ -386,8 +392,9 @@ callbacks are allowed to consume a pending sign-in.
 Vitest covers animation priority and configured animation selection, speech
 signal gating, motion compatibility and variety, transition timing, async
 request replacement, pause debounce, Idle interim handling, one-shot actions,
-scheduler cleanup, drawing-buffer sampling and silhouette alpha thresholds for
-click-through, drag inertia including camera-jump rejection, the lean cap,
+scheduler cleanup, drawing-buffer sampling, silhouette alpha thresholds and
+the per-mode Settings copy for click-through, drag inertia including
+camera-jump rejection, the lean cap,
 the direction each channel lags in and return-to-rest, plus the Settings
 window's own logic: IPC error unwrapping, slider handle constraints, lighting
 field ranges, section descriptors, VRoid character grouping, the MCP tool

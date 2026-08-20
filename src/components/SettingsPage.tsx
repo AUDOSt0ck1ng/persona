@@ -55,6 +55,10 @@ interface ConfirmationRequest {
 
 export function SettingsPage() {
   const bridge = window.personaSettings;
+  // Read apart from the snapshot because the mode follows the platform rather
+  // than anything stored, and stays null until the main process answers.
+  const [clickThroughMode, setClickThroughMode] =
+    useState<ClickThroughMode | null>(null);
   const vroidHubBridge = window.personaVroidHub;
   const { chooseTheme, preference: themePreference } = useThemePreference();
   const [previewCollapsed, setPreviewCollapsed] = useState(false);
@@ -155,6 +159,14 @@ export function SettingsPage() {
       })
       .catch((error: unknown) => setNotice(errorMessage(error)));
     return bridge.subscribe(setSettings);
+  }, [bridge]);
+
+  useEffect(() => {
+    if (!bridge) return;
+    void bridge
+      .getClickThroughMode()
+      .then(setClickThroughMode)
+      .catch((error: unknown) => setNotice(errorMessage(error)));
   }, [bridge]);
 
   useEffect(() => {
@@ -882,6 +894,18 @@ export function SettingsPage() {
     );
   };
 
+  const previewClickThroughEnabled = (enabled: boolean) => {
+    setSettings((current) => ({ ...current, click_through_enabled: enabled }));
+  };
+
+  const saveClickThroughEnabled = async (enabled: boolean) => {
+    if (!bridge) return;
+    await persistAppearance(
+      () => bridge.setClickThroughEnabled(enabled),
+      enabled ? 'Click-through enabled.' : 'Click-through disabled.',
+    );
+  };
+
   const previewVroidHubPlaintextStorageAllowed = (allowed: boolean) => {
     setSettings((current) => ({
       ...current,
@@ -1226,13 +1250,16 @@ export function SettingsPage() {
               bridge={bridge}
               busy={busy}
               chooseTheme={chooseTheme}
+              clickThroughMode={clickThroughMode}
               previewCharacterSize={previewCharacterSize}
+              previewClickThroughEnabled={previewClickThroughEnabled}
               previewLighting={previewLighting}
               previewLightingField={previewLightingField}
               previewLightingNumber={previewLightingNumber}
               resetLighting={resetLighting}
               saveAvatarWindowSize={saveAvatarWindowSize}
               saveCharacterSize={saveCharacterSize}
+              saveClickThroughEnabled={saveClickThroughEnabled}
               saveLightingField={saveLightingField}
               saveLightingNumber={saveLightingNumber}
               selectedModel={selectedModel}

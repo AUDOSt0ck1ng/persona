@@ -12,6 +12,7 @@ import type {
 import type { VroidHubClient } from './vroid-hub-client.cjs';
 import type {
   AvatarRendererEvent,
+  ClickThroughMode,
   ClickThroughSnapshot,
   PersonaBridgeApi,
   PersonaMcpStatus,
@@ -106,6 +107,10 @@ const personaSettings = {
       width,
       height,
     ),
+  getClickThroughMode: (): Promise<ClickThroughMode> =>
+    invoke<ClickThroughMode>('persona:settings-get-click-through-mode'),
+  setClickThroughEnabled: (enabled: boolean): Promise<SettingsSnapshot> =>
+    invoke<SettingsSnapshot>('persona:settings-set-click-through', enabled),
   setSpeakingTransition: (
     transition: SpeakingTransition,
   ): Promise<SettingsSnapshot> =>
