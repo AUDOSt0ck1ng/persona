@@ -12,6 +12,7 @@ import type {
 import type { VroidHubClient } from './vroid-hub-client.cjs';
 import type {
   AvatarRendererEvent,
+  ClickThroughSnapshot,
   PersonaBridgeApi,
   PersonaMcpStatus,
   PersonaSettingsApi,
@@ -43,11 +44,15 @@ function invoke<TResult>(channel: string, ...args: unknown[]): Promise<TResult> 
 }
 
 const personaBridge = {
+  getClickThrough: (): Promise<ClickThroughSnapshot> =>
+    invoke<ClickThroughSnapshot>('persona:get-click-through'),
   getSnapshot: (): Promise<AvatarRendererEvent | null> =>
     invoke<AvatarRendererEvent | null>('persona:get-snapshot'),
   hide: (): void => ipcRenderer.send('persona:hide'),
   moveBy: (dx: number, dy: number): void =>
     ipcRenderer.send('persona:move-by', dx, dy),
+  setMousePassthrough: (ignore: boolean): void =>
+    ipcRenderer.send('persona:set-mouse-passthrough', ignore),
   subscribe: (listener: (event: AvatarRendererEvent) => void): Unsubscribe =>
     subscribe('persona:event', listener),
 } satisfies PersonaBridgeApi;

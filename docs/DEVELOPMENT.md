@@ -41,6 +41,57 @@ The preload and renderer share their complete cross-process API contract from
 `shared/persona-api.d.ts`; update that contract and the typed preload object
 together whenever an exposed event or method changes.
 
+### Desktop click-through
+
+`setIgnoreMouseEvents` works on every platform, but its `forward` option is
+macOS and Windows only, and forwarding is the only reason an ignoring window
+still receives mouse moves. That single constraint produces the two modes in
+`electron/click-through.cts`. `silhouette` ignores the mouse, then lets the
+renderer carve the character back out of it. `whole-window` is what remains
+without forwarding: on or off for the entire window, with the tray toggle the
+only way back. Both start off, so an install that never touches the toggle
+behaves exactly as it did before the mode existed.
+
+Only the character's shape can say where the window should take input, and only
+the renderer knows that shape, so `PassthroughController` in
+`src/components/Scene.tsx` samples it and reports the result over
+`persona:set-mouse-passthrough`. The main process treats that as advice it may
+drop: results arriving in `whole-window` mode, while the mode is off, or in any
+type but a boolean never reach the window. `src/click-through.ts` keeps the
+coordinate and threshold arithmetic apart from the Three.js wiring so both
+halves are testable without a window.
+
+The sample is one pixel of alpha from the frame just drawn, not a raycast. The
+packaged rig is roughly 29k triangles across three skinned meshes, and three.js
+casts against a skinned mesh by transforming every vertex by its bones on the
+CPU, which costs far more than a frame's budget however rarely it is called.
+Reading a pixel costs the same whatever the model, and matches what the user
+sees: alpha-cut hair passes clicks through the gaps it appears to have rather
+than catching them on the quads it is drawn on. The read has to happen inside
+`scene.onAfterRender`, because the drawing buffer holds the frame only until it
+reaches the compositor; sampling from the mouse event instead would need
+`preserveDrawingBuffer`, which every user would pay for whether or not they ever
+turn the mode on. Renders into an offscreen target are skipped, since those are
+not the frame the user sees.
+
+The mode reaches the renderer both ways on purpose. It is pushed on change so a
+tray toggle takes effect at once, and pulled through `persona:get-click-through`
+on mount because the push is not the `get-snapshot` "last event" and would
+otherwise be lost to a reload, or to a renderer that had not yet subscribed. A
+renderer that has heard neither reports nothing rather than guessing, so it can
+never talk the window out of flags the main process already applied.
+
+Changing the mouse-ignore flags drops the window out of the always-on-top band,
+which is invisible until a click passes through and the app behind it rises over
+the avatar. Every change therefore re-asserts the level, and the flags are only
+ever set in one place so that cannot be missed.
+
+The mode is session state and is deliberately not persisted, so it is not part
+of the settings snapshot and has no Settings window control; every launch starts
+off. The tray toggle applies the new flags immediately rather than waiting for a
+hit-test that may never come, which is what makes it a dependable way back to an
+interactive window.
+
 ## Settings and local media
 
 `public/assets/library.json` declares the immutable library shipped with the
@@ -326,15 +377,17 @@ The Node suite covers settings persistence and imported-media boundaries, MCP
 discovery, tool calls and session lifetime, the bridge boundary, URL protocol,
 Hyprland rules, PipeWire selection and PCM normalization, process discovery on
 macOS and Windows, native NDJSON parsing, shared pause smoothing, listener
-lifecycle, asset safety, release checksums, and VRoid Hub OAuth — including
-which refresh failures are allowed to discard the saved session and which must
-preserve it, the forced refresh that tells a revoked authorization apart from an
-outage, and which callbacks are allowed to consume a pending sign-in.
+lifecycle, asset safety, release checksums, click-through platform support and
+hit-test gating, and VRoid Hub OAuth — including which refresh failures are
+allowed to discard the saved session and which must preserve it, the forced
+refresh that tells a revoked authorization apart from an outage, and which
+callbacks are allowed to consume a pending sign-in.
 
 Vitest covers animation priority and configured animation selection, speech
 signal gating, motion compatibility and variety, transition timing, async
 request replacement, pause debounce, Idle interim handling, one-shot actions,
-scheduler cleanup, drag inertia including camera-jump rejection, the lean cap,
+scheduler cleanup, drawing-buffer sampling and silhouette alpha thresholds for
+click-through, drag inertia including camera-jump rejection, the lean cap,
 the direction each channel lags in and return-to-rest, plus the Settings
 window's own logic: IPC error unwrapping, slider handle constraints, lighting
 field ranges, section descriptors, VRoid character grouping, the MCP tool

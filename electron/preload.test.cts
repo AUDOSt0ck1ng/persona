@@ -74,7 +74,8 @@ function loadPreload(): PreloadHarness {
 test("preload exposes only narrow Persona and settings IPC operations", async () => {
   const { exposed, invocations, listeners, sent } = loadPreload();
   const bridge = requiredApi(exposed, 'personaBridge', [
-    'getSnapshot', 'hide', 'moveBy', 'subscribe',
+    'getClickThrough', 'getSnapshot', 'hide', 'moveBy', 'setMousePassthrough',
+    'subscribe',
   ] as const);
   const settings = requiredApi(exposed, 'personaSettings', [
     'get', 'importModel', 'createAnimation', 'addAnimationClips',
@@ -97,9 +98,11 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
     [...exposed.keys()],
     ["personaBridge", "personaSettings", "personaVroidHub"],
   );
+  await bridge.getClickThrough();
   await bridge.getSnapshot();
   bridge.hide();
   bridge.moveBy(12, -4);
+  bridge.setMousePassthrough(true);
   await settings.get();
   await settings.importModel({ model_name: "Studio Assistant" });
   await settings.createAnimation({
@@ -154,6 +157,7 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
   await vroidHub.openCharacterPage("character-id", "character-model-id");
 
   assert.deepEqual(invocations, [
+    ["persona:get-click-through"],
     ["persona:get-snapshot"],
     ["persona:settings-get"],
     ["persona:settings-import-model", { model_name: "Studio Assistant" }],
@@ -229,6 +233,7 @@ test("preload exposes only narrow Persona and settings IPC operations", async ()
   assert.deepEqual(sent, [
     ["persona:hide"],
     ["persona:move-by", 12, -4],
+    ["persona:set-mouse-passthrough", true],
     ["persona:settings-set-window-theme", "light"],
   ]);
 
