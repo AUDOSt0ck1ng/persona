@@ -74,6 +74,18 @@ reaches the compositor; sampling from the mouse event instead would need
 turn the mode on. Renders into an offscreen target are skipped, since those are
 not the frame the user sees.
 
+Every presented frame is sampled rather than only the frames a pointer event
+asks for, because the character keeps moving under a cursor that is standing
+still: a decision taken from a frame the idle animation has walked away from
+sends the click to the wrong window in both directions. Measured on Windows at
+60Hz, the read waits 1.6-4.5ms on the GPU without shifting frame times off
+16.7ms or producing a single long frame, in two configurations that differ by
+window size and lighting. That wait replaces the one the frame would otherwise
+spend at vsync rather than adding to it, which is why sampling every frame is
+affordable and a throttle would buy nothing. A display with a shorter frame
+budget has not been measured; the read is a wait rather than work, but that is
+the case to check first if the mode ever reads as janky.
+
 The mode reaches the renderer both ways on purpose. It is pushed on change so a
 tray toggle takes effect at once, and pulled through `persona:get-click-through`
 on mount because the push is not the `get-snapshot` "last event" and would
