@@ -1,3 +1,4 @@
+import { clickThroughCopy } from '../../click-through';
 import { singleRangeStyle } from '../../range-slider';
 import {
   MAX_AVATAR_WINDOW_HEIGHT,
@@ -16,7 +17,9 @@ interface AppearanceSectionProps {
   bridge: Window['personaSettings'];
   busy: boolean;
   chooseTheme: (preference: ThemePreference) => void;
+  clickThroughMode: ClickThroughMode | null;
   previewCharacterSize: (size: number) => void;
+  previewClickThroughEnabled: (enabled: boolean) => void;
   previewLighting: PersonaLightingSettings;
   previewLightingField: <Field extends keyof PersonaLightingSettings>(
     field: Field,
@@ -29,6 +32,7 @@ interface AppearanceSectionProps {
   resetLighting: () => Promise<void>;
   saveAvatarWindowSize: () => Promise<void>;
   saveCharacterSize: (size: number) => Promise<void>;
+  saveClickThroughEnabled: (enabled: boolean) => Promise<void>;
   saveLightingField: <Field extends keyof PersonaLightingSettings>(
     field: Field,
     value: PersonaLightingSettings[Field],
@@ -52,13 +56,16 @@ export function AppearanceSection({
   bridge,
   busy,
   chooseTheme,
+  clickThroughMode,
   previewCharacterSize,
+  previewClickThroughEnabled,
   previewLighting,
   previewLightingField,
   previewLightingNumber,
   resetLighting,
   saveAvatarWindowSize,
   saveCharacterSize,
+  saveClickThroughEnabled,
   saveLightingField,
   saveLightingNumber,
   selectedModel,
@@ -67,6 +74,9 @@ export function AppearanceSection({
   settings,
   themePreference,
 }: AppearanceSectionProps) {
+  const clickThrough = clickThroughMode
+    ? clickThroughCopy(clickThroughMode)
+    : null;
   return (
     <>
       <section className="settings-panel theme-panel">
@@ -215,6 +225,44 @@ export function AppearanceSection({
           <p className="desktop-note">
             Resizing the avatar window is available in the Persona
             desktop app.
+          </p>
+        )}
+      </section>
+
+      <section className="settings-panel appearance-panel">
+        <div className="panel-heading">
+          <div>
+            <h2>Click-through</h2>
+            <p>
+              Let the avatar float over the desktop instead of catching
+              clicks meant for what sits behind it.
+            </p>
+          </div>
+        </div>
+        <div className="lighting-toggle-row">
+          <span>Pass clicks through</span>
+          <button
+            aria-checked={settings.click_through_enabled}
+            className={`toggle-switch${settings.click_through_enabled ? ' active' : ''}`}
+            disabled={busy || !bridge || !clickThroughMode}
+            onClick={() => {
+              const next = !settings.click_through_enabled;
+              previewClickThroughEnabled(next);
+              void saveClickThroughEnabled(next);
+            }}
+            role="switch"
+            type="button"
+          />
+        </div>
+        {clickThrough && (
+          <>
+            <p className="theme-note">{clickThrough.description}</p>
+            <p className="theme-note">{clickThrough.note}</p>
+          </>
+        )}
+        {!bridge && (
+          <p className="desktop-note">
+            Click-through is available in the Persona desktop app.
           </p>
         )}
       </section>

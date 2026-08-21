@@ -435,6 +435,14 @@ test("validates custom metadata, files, duplicates, and appearance settings", (c
     width: 900,
     height: 1200,
   });
+  assert.equal(store.getSnapshot().click_through_enabled, false);
+  assert.equal(store.setClickThroughEnabled("yes").click_through_enabled, false);
+  assert.equal(store.setClickThroughEnabled(true).click_through_enabled, true);
+  assert.equal(
+    createSettingsStore({ userDataPath, packagedLibraryPath }).getSnapshot()
+      .click_through_enabled,
+    true,
+  );
   assert.throws(
     () =>
       store.setSpeakingTransition({
@@ -478,6 +486,8 @@ test("validates custom metadata, files, duplicates, and appearance settings", (c
     store.resetDeveloperSettings().vroid_hub_allow_plaintext_storage,
     false,
   );
+  // Click-through is an Appearance setting, so the developer reset leaves it.
+  assert.equal(store.getSnapshot().click_through_enabled, true);
 
   const invalidModel = path.join(root, "invalid.vrm");
   fs.writeFileSync(invalidModel, "not glTF");

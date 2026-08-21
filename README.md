@@ -31,6 +31,15 @@ Each listener is scoped to an automatically detected or user-selected playback
 process. Persona does not capture the microphone, save audio, produce speech,
 transcribe content, or send audio over the network.
 
+Click-through lets the avatar float over the desktop, and comes in two forms. On
+Windows and macOS only the transparent area passes clicks through and the
+character itself stays clickable, because Electron can keep delivering mouse
+moves to a window that ignores clicks there. Linux has no such forwarding, so
+the whole window passes clicks through at once and the character stops
+responding until the toggle comes back off; treat it as experimental there,
+since it relies on the X11 input shape and no Wayland compositor has been
+verified. It starts off everywhere, and stays however you leave it.
+
 ## Try Persona locally
 
 Requirements:
@@ -85,6 +94,15 @@ character's initial size, and add your own `.vrm` and `.vrma` files.
 Until a default model exists, Persona does not create the avatar window or
 start its voice-output listener. The first imported model becomes the default
 automatically.
+
+**Click-through** decides whether the avatar behaves as a desktop pet. It starts
+off, leaving the window fully interactive. Turn it on and clicks land on
+whatever sits behind the transparent area around the character. On Windows and
+macOS the character itself still takes orbit, zoom, and Alt+drag as usual; on
+Linux nothing in the window is clickable while it is on, and the tray menu reads
+**Click-through (whole window)** to say so. Toggle it from the tray menu or from
+**Settings → Appearance**; either way the choice is saved and comes back on the
+next launch. The tray toggle is the way back to an interactive window.
 
 Persona always provides **Idle** and **Speaking** action slots. They begin
 without media, so the model keeps its normal pose until you add clips. Each

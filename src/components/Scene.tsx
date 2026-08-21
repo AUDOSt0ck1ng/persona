@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import {
   ContactShadows,
@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { Avatar } from './Avatar';
 import type { PlayableAnimationType } from '../animation-catalog';
 import { calculateFullBodyFraming } from '../camera-framing';
+import { drawingBufferPixel, passthroughForAlpha } from '../click-through';
 import type { DragInertiaState } from '../drag-inertia';
 import { resolveLightingSettings } from '../settings-defaults';
 
@@ -43,6 +44,7 @@ interface SceneProps {
   speakingDebounceMs: number;
   idleInterimMs: number;
   speakingTransition: PersonaSpeakingTransitionSettings;
+  silhouetteHitTest?: boolean;
 }
 
 interface TargetControls {
@@ -150,6 +152,162 @@ function FullBodyCamera({
   return null;
 }
 
+/**
+ * Keeps the avatar window click-through everywhere except over the character.
+ * While the window ignores the mouse Electron still forwards mousemove, so this
+ * samples the alpha the frame already drew under the cursor and hands input
+ * back only where the character is actually visible.
+ *
+ * Alpha rather than a raycast: the rig is ~29k skinned triangles, and three.js
+ * transforms every vertex by its bones on the CPU for each cast, which costs
+ * far more than a frame. Reading one pixel is independent of model complexity,
+ * and is truer to what the user sees, since alpha-cut hair reads as the
+ * background it looks like instead of as the quad it is drawn on.
+ */
+function PassthroughController({ enabled }: { enabled: boolean }) {
+  const gl = useThree((state) => state.gl);
+  const scene = useThree((state) => state.scene);
+
+  useEffect(() => {
+    const bridge = window.personaBridge;
+    if (!bridge?.setMousePassthrough) return;
+
+    // Say nothing until the main process reports the mode, so a renderer that
+    // has not heard yet cannot contradict the flags the window already has.
+    if (!enabled) return;
+
+    const canvas = gl.domElement;
+    const context = gl.getContext();
+    const sample = new Uint8Array(4);
+    let passthrough = true;
+    // Only a press this window received. A button held from a gesture that
+    // began on the desktop is still forwarded here while the window ignores the
+    // mouse, and must not make the window grab what it started on.
+    let gestureActive = false;
+    let clientX = 0;
+    let clientY = 0;
+    // Nothing is decided until a real cursor position has arrived. Sampling
+    // every frame would otherwise answer for the seeded origin, and whether
+    // that corner happens to be transparent is a fact about the current
+    // framing rather than anything the mode can rely on.
+    let havePointer = false;
+
+    const apply = (next: boolean) => {
+      if (next === passthrough) return;
+      passthrough = next;
+      bridge.setMousePassthrough(next);
+    };
+
+    // The drawing buffer only holds this frame's pixels until it is handed to
+    // the compositor, so the sample has to be taken inside the render rather
+    // than from the event that asked for it.
+    //
+    // Every presented frame is sampled, not only the ones a pointer event asked
+    // for. The character keeps moving under a cursor that is standing still, so
+    // an answer left over from a frame the idle animation has since walked away
+    // from sends the click to the wrong window: through a character that has
+    // swayed under the cursor, or into the avatar from a gap it has left. A
+    // measured run showed the read costing 1.6-4.5ms of waiting on the GPU
+    // without moving frame times off 60Hz at all, because that wait replaces
+    // the one the frame would otherwise spend at vsync.
+    const previous = scene.onAfterRender;
+    // eslint-disable-next-line react-hooks/immutability
+    scene.onAfterRender = function afterRender(...args) {
+      previous.apply(this, args);
+      // A render into an offscreen target is not the frame the user sees.
+      if (gl.getRenderTarget() !== null) return;
+      // A gesture keeps the window regardless of what is under the cursor, so
+      // the answer is known without the pixel. Reading it anyway would stall
+      // the pipeline once per frame of a drag, which is the motion that most
+      // needs the frames.
+      if (gestureActive) {
+        apply(false);
+        return;
+      }
+      // The window is already ignoring when the mode turns on, so leaving the
+      // main process's flags standing is the right answer until the first
+      // forwarded move says where the cursor actually is.
+      if (!havePointer) return;
+      const pixel = drawingBufferPixel(
+        canvas.getBoundingClientRect(),
+        { width: canvas.width, height: canvas.height },
+        clientX,
+        clientY,
+      );
+      if (!pixel) {
+        // The cursor is outside the canvas and there is no pixel to read out
+        // there. Nothing outside it is ever drawn, so decide rather than leave
+        // the last decision standing.
+        apply(true);
+        return;
+      }
+      context.readPixels(
+        pixel.x,
+        pixel.y,
+        1,
+        1,
+        context.RGBA,
+        context.UNSIGNED_BYTE,
+        sample,
+      );
+      apply(passthroughForAlpha({ alpha: sample[3] ?? 0, gestureActive }));
+    };
+
+    // Pointer events, not mouse events: useWindowDrag cancels `pointerdown` for
+    // Alt+drag, which suppresses the compatibility mouse events afterwards, and
+    // the cursor position would then freeze until an unrelated click revived
+    // it. Captured on window so the same hook's stopPropagation cannot hide
+    // them either.
+    const onPointerDown = () => {
+      gestureActive = true;
+      apply(false);
+    };
+    // A release can land outside the window with no pointerup ever arriving,
+    // the hazard useWindowDrag documents, so the button mask ends the gesture
+    // too rather than trusting the release alone.
+    const onPointerMove = (event: PointerEvent) => {
+      clientX = event.clientX;
+      clientY = event.clientY;
+      havePointer = true;
+      if (event.buttons === 0) gestureActive = false;
+    };
+    const onPointerUp = (event: PointerEvent) => {
+      if (event.buttons === 0) gestureActive = false;
+    };
+    // A cancelled pointer never reports a release: a compositor gesture
+    // takeover or a lifted touch contact leaves no `pointerup`, and for touch
+    // no further `pointermove` either. A gesture cleared only by those two
+    // would stay active forever, pinning the whole window interactive with the
+    // tray toggle as the only way out.
+    const onPointerCancel = () => {
+      gestureActive = false;
+    };
+
+    window.addEventListener('pointerdown', onPointerDown, { capture: true });
+    window.addEventListener('pointermove', onPointerMove, { capture: true });
+    window.addEventListener('pointerup', onPointerUp, { capture: true });
+    window.addEventListener('pointercancel', onPointerCancel, {
+      capture: true,
+    });
+    // Match the window's initial ignoring state set by the main process.
+    bridge.setMousePassthrough(true);
+
+    return () => {
+      scene.onAfterRender = previous;
+      window.removeEventListener('pointerdown', onPointerDown, { capture: true });
+      window.removeEventListener('pointermove', onPointerMove, { capture: true });
+      window.removeEventListener('pointerup', onPointerUp, { capture: true });
+      window.removeEventListener('pointercancel', onPointerCancel, {
+        capture: true,
+      });
+      // Leave the window interactive so a later mount is never stuck ignoring.
+      bridge.setMousePassthrough(false);
+    };
+  }, [enabled, gl, scene]);
+
+  return null;
+}
+
 export function Scene(props: SceneProps) {
   const lighting = resolveLightingSettings(props.lighting);
   const [avatarScene, setAvatarScene] = useState<THREE.Object3D | null>(null);
@@ -209,6 +367,7 @@ export function Scene(props: SceneProps) {
         object={avatarScene}
       />
       <Avatar {...props} onReady={handleAvatarReady} />
+      <PassthroughController enabled={props.silhouetteHitTest ?? false} />
       {props.groundShadow && grounding && (
         <ContactShadows
           blur={2.4}

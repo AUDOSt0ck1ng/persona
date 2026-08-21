@@ -102,11 +102,31 @@ export interface ExpressionReleaseEvent {
   type: 'expression-release';
 }
 
+/**
+ * `silhouette` hands input back over the character and passes the transparent
+ * gaps through; `whole-window` ignores the mouse everywhere, which is all a
+ * platform without Electron's mouse-move forwarding can offer.
+ */
+export type ClickThroughMode = 'silhouette' | 'whole-window';
+
+export interface ClickThroughSnapshot {
+  enabled: boolean;
+  mode: ClickThroughMode;
+}
+
+// Tells the renderer how the avatar window is behaving rather than what the
+// voice is doing, so it travels the renderer channel without becoming the
+// snapshot the renderer reads for its initial voice state.
+export interface ClickThroughEvent extends ClickThroughSnapshot {
+  type: 'click-through';
+}
+
 export type AvatarRendererEvent =
   | BridgeEvent
   | AnimationPlaybackEvent
   | ExpressionHoldEvent
-  | ExpressionReleaseEvent;
+  | ExpressionReleaseEvent
+  | ClickThroughEvent;
 
 export interface PersonaLightingSettings {
   tone_mapping: 'none' | 'aces';
@@ -168,6 +188,7 @@ export interface PersonaSettingsSnapshot {
   default_model_id: string | null;
   character_size: number;
   avatar_window: PersonaAvatarWindowSize;
+  click_through_enabled: boolean;
   developer_settings_enabled: boolean;
   vroid_hub_allow_plaintext_storage: boolean;
   body_transition_ms: number;
@@ -259,9 +280,11 @@ export interface PersonaVroidHubCharacter {
 }
 
 export interface PersonaBridgeApi {
+  getClickThrough(): Promise<ClickThroughSnapshot>;
   getSnapshot(): Promise<AvatarRendererEvent | null>;
   hide(): void;
   moveBy(dx: number, dy: number): void;
+  setMousePassthrough(ignore: boolean): void;
   subscribe(listener: (event: AvatarRendererEvent) => void): () => void;
 }
 
@@ -293,6 +316,13 @@ export interface PersonaSettingsApi {
     width: number,
     height: number,
   ): Promise<PersonaSettingsSnapshot>;
+  /**
+   * The mode the running platform can offer. Derived from the platform rather
+   * than stored, so it is read separately from the snapshot that persists
+   * whether click-through is on.
+   */
+  getClickThroughMode(): Promise<ClickThroughMode>;
+  setClickThroughEnabled(enabled: boolean): Promise<PersonaSettingsSnapshot>;
   setSpeakingTransition(
     transition: PersonaSpeakingTransitionSettings,
   ): Promise<PersonaSettingsSnapshot>;

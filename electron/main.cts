@@ -27,6 +27,10 @@ import {
   type OauthCallbackParameters,
 } from './bridge-server.cjs';
 import {
+  createClickThroughState,
+  type MouseIgnoreFlags,
+} from './click-through.cjs';
+import {
   createPersonaMcpHandler,
   type PersonaMcpHandler,
   type WindowAction,
@@ -89,6 +93,7 @@ import {
 import type {
   AudioListenerStatus,
   AvatarRendererEvent,
+  ClickThroughSnapshot,
   VoiceState,
 } from './types.cjs';
 import { isRecord } from './types.cjs';
@@ -170,6 +175,7 @@ let heldExpression: {
 } | null = null;
 let heldExpressionTimer: NodeJS.Timeout | null = null;
 const pendingRendererEvents = new PendingRendererEvents();
+const clickThrough = createClickThroughState(process.platform);
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -392,6 +398,7 @@ function createWindow(): BrowserWindow {
   window.setAlwaysOnTop(true, "floating");
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   window.setOpacity(1);
+  applyClickThroughFlags(window);
   window.once("ready-to-show", () => {
     if (window.isDestroyed()) return;
     positionWindow(window);
@@ -915,14 +922,61 @@ function flushPendingRendererEvents(): void {
   }
 }
 
-function emitToRenderer(event: AvatarRendererEvent): void {
-  latestEvent = event;
+function sendToRenderer(event: AvatarRendererEvent): void {
   const pendingKey = pendingRendererEvents.add(event);
   if (!avatarWindow || avatarWindow.isDestroyed()) return;
   // The did-finish-load listener will flush whatever is queued here.
   if (avatarWindow.webContents.isLoading()) return;
   avatarWindow.webContents.send("persona:event", event);
   pendingRendererEvents.delete(pendingKey);
+}
+
+function emitToRenderer(event: AvatarRendererEvent): void {
+  latestEvent = event;
+  sendToRenderer(event);
+}
+
+function clickThroughSnapshot(): ClickThroughSnapshot {
+  return { enabled: clickThrough.isEnabled(), mode: clickThrough.mode };
+}
+
+// Queued and flushed like any other renderer event, but never becomes the
+// get-snapshot "last event", which the renderer reads for its initial voice
+// state.
+function emitClickThrough(): void {
+  sendToRenderer({ type: "click-through", ...clickThroughSnapshot() });
+}
+
+// Changing the mouse-ignore flags drops the window out of the always-on-top
+// band, so the app behind it covers the avatar the moment a click passes
+// through. Re-assert the level with every change, and the workspace visibility
+// with it: setting the level is what disturbs that too, which is why the two
+// travel together everywhere else in this file. The only call sites that touch
+// these flags are here.
+function applyMouseIgnore(window: BrowserWindow, flags: MouseIgnoreFlags): void {
+  window.setIgnoreMouseEvents(flags.ignore, { forward: flags.forward });
+  window.setAlwaysOnTop(true, "floating");
+  window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+}
+
+function applyClickThroughFlags(window: BrowserWindow): void {
+  applyMouseIgnore(window, clickThrough.windowFlags());
+}
+
+function setClickThroughEnabled(enabled: boolean): void {
+  clickThrough.setEnabled(enabled);
+  // Take effect at once rather than waiting for the renderer's next hit-test,
+  // so the tray toggle is a reliable way back to a clickable window.
+  if (avatarWindow && !avatarWindow.isDestroyed()) {
+    applyClickThroughFlags(avatarWindow);
+  }
+  emitClickThrough();
+  refreshTrayMenu();
+  // The tray toggle and the Settings control both land here, so the stored
+  // choice cannot drift from the flags the window is actually wearing.
+  if (settingsStore) {
+    publishSettings(settingsStore.setClickThroughEnabled(enabled));
+  }
 }
 
 function handleBridgeEvent(event: AvatarRendererEvent): void {
@@ -1034,6 +1088,29 @@ function refreshTrayMenu(): void {
           click: () => handleBridgeEvent(voiceState("speaking")),
         },
         { type: "separator" },
+        {
+          label:
+            clickThrough.mode === "silhouette"
+              ? "Click-through (float over the desktop)"
+              : "Click-through (whole window)",
+          type: "checkbox",
+          checked: clickThrough.isEnabled(),
+          // The Settings control reaches setClickThroughEnabled through an IPC
+          // handler that turns a failed write into a notice; a menu callback
+          // has nowhere to reject to, and the flags have already changed by
+          // then, so a disk failure here must not take the process down.
+          click: (item) => {
+            try {
+              setClickThroughEnabled(item.checked);
+            } catch (error) {
+              console.error(
+                "[persona] could not save the click-through choice:",
+                error,
+              );
+            }
+          },
+        },
+        { type: "separator" },
         quitItem,
       ]
     : [
@@ -1091,6 +1168,9 @@ if (!app.requestSingleInstanceLock()) {
     settingsStore = store;
     const initialSettingsSnapshot = store.getSnapshot();
     modelConfigured = snapshotHasConfiguredModel(initialSettingsSnapshot);
+    // Seeded before the avatar window is created, so its first flags already
+    // match the stored choice rather than flipping once something notices.
+    clickThrough.setEnabled(initialSettingsSnapshot.click_through_enabled);
     mcpAnimationCatalogSignature = animationCatalogSignature(
       initialSettingsSnapshot,
     );
@@ -1134,6 +1214,11 @@ if (!app.requestSingleInstanceLock()) {
     }
 
     ipcMain.handle("persona:get-snapshot", () => latestEvent);
+    // Click-through is deliberately not the get-snapshot "last event", so the
+    // renderer reads it separately. Pulling it on mount means a renderer that
+    // loaded after the event was pushed, or reloaded later, still learns the
+    // mode instead of silently assuming it is off.
+    ipcMain.handle("persona:get-click-through", () => clickThroughSnapshot());
     ipcMain.handle("persona:settings-get", () => store.getSnapshot());
     handleFromSettings(
       "persona:settings-import-model",
@@ -1224,6 +1309,19 @@ if (!app.requestSingleInstanceLock()) {
         );
         applyAvatarWindowSize();
         return snapshot;
+      },
+    );
+    // Derived from the platform rather than stored, so Settings reads it apart
+    // from the snapshot and the rule stays in one place.
+    handleFromSettings(
+      "persona:settings-get-click-through-mode",
+      () => clickThrough.mode,
+    );
+    handleFromSettings(
+      "persona:settings-set-click-through",
+      (enabled: unknown) => {
+        setClickThroughEnabled(enabled === true);
+        return store.getSnapshot();
       },
     );
     handleFromSettings(
@@ -1478,6 +1576,16 @@ if (!app.requestSingleInstanceLock()) {
         Math.round(bounds.x + dx),
         Math.round(bounds.y + dy),
       );
+    });
+    // The renderer owns the fine-grained decision, forwarding a silhouette
+    // hit-test as the cursor moves. A send has no reply channel to reject
+    // through, so anything but a boolean from the avatar window is dropped.
+    ipcMain.on("persona:set-mouse-passthrough", (event, ignore) => {
+      if (!avatarWindow || avatarWindow.isDestroyed()) return;
+      if (event.sender !== avatarWindow.webContents) return;
+      const flags = clickThrough.passthroughFlags(ignore);
+      if (!flags) return;
+      applyMouseIgnore(avatarWindow, flags);
     });
     // The resolved theme lives in renderer storage, so the window chrome can
     // only be corrected once the settings renderer reports it. Accepts the two
