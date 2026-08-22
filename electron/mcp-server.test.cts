@@ -143,8 +143,11 @@ test("Persona MCP exposes and executes the local character tools", async (contex
   const animationInput = toolInputProperty(animationTool, 'animation');
   assert.equal(animationInput.type, "string");
   assert.equal(animationInput.enum, undefined);
-  assert.equal(typeof animationInput.description, 'string');
-  assert.match(String(animationInput.description), /wave-hello/);
+  assert.equal(
+    animationInput.description,
+    'The installed character action to play.',
+  );
+  assert.match(toolDescription(animationTool), /A friendly wave/);
   const windowTool = toolNamed(tools.tools, 'control_window');
   assert.deepEqual(toolInputProperty(windowTool, 'action').enum, WINDOW_ACTIONS);
 
@@ -208,13 +211,13 @@ test("Persona MCP exposes custom animation metadata in its tool contract", async
   await connectClient(client, transport);
   const tool = toolNamed((await client.listTools()).tools, 'play_animation');
 
-  assert.equal(toolInputProperty(tool, 'animation').enum, undefined);
-  assert.match(
-    String(toolInputProperty(tool, 'animation').description),
-    /wave-hello/,
-  );
   assert.match(toolDescription(tool), /A small friendly wave/);
   assert.match(toolDescription(tool), /Use when greeting the user/);
+  assert.equal(
+    JSON.stringify(tool).split('Use when greeting the user').length - 1,
+    1,
+    'The action catalog belongs to one field of the tool definition.',
+  );
 });
 
 test("Persona MCP refreshes animation actions inside an active client session", async (context) => {
@@ -292,9 +295,9 @@ test("Persona MCP refreshes animation actions inside an active client session", 
     'play_animation',
   );
   assert.match(toolDescription(refreshedTool), /finger-gun/);
-  assert.match(
-    String(toolInputProperty(refreshedTool, 'animation').description),
-    /finger-gun/,
+  assert.equal(
+    toolInputProperty(refreshedTool, 'animation').description,
+    'The installed character action to play.',
   );
 });
 

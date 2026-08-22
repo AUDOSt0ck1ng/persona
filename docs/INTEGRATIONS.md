@@ -38,11 +38,24 @@ Persona exposes these tools:
 The animation descriptions are generated from Persona's playable actions.
 Empty actions are omitted until a VRMA clip is added. User uploads, user edits
 to packaged metadata, removals, and packaged-action resets are reflected
-immediately through an MCP tool-list change notification. The
-`play_animation` input remains open to valid action names and checks the live
-library when invoked, so a client that does not refresh tool descriptions can
-still run an action added during the current session. No media paths or
-filesystem access are exposed.
+immediately through an MCP tool-list change notification. The action catalog is
+listed once, in the `play_animation` description; the `animation` argument only
+names what it takes. No media paths or filesystem access are exposed.
+
+The `play_animation` input remains open to valid action names and checks the
+live library when invoked, so a client that does not refresh tool descriptions
+can still run an action added during the current session. This matters because
+the catalog changes while a session is live: `list_animations` always answers
+from the current library, while a cached tool list — and the copy of it already
+in a model's context — can be a revision behind. Leaving the argument open lets
+the fresher of the two win, and nothing unplayable reaches the app regardless: a
+malformed name fails schema validation, and a well-formed one the library does
+not hold is turned away by the handler, which names `list_animations` as the
+next step. Both arrive as `isError` results rather than protocol errors, so the
+text is written for the model to read and act on. Honour the
+tool-list change notification if you can, but treat it as an optimization:
+`list_animations` is the source of truth, and a client that ignores the
+notification entirely still behaves correctly.
 
 With no configured model, window and animation commands remain inactive.
 Persona can still report status while its Settings window is used for initial

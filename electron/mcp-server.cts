@@ -83,17 +83,16 @@ function animationToolDescription(
   ].join('\n');
 }
 
-function animationInputSchema(animations: readonly PlayableAnimation[]) {
-  return z
-    .string()
-    .regex(
-      ANIMATION_NAME_PATTERN,
-      'Animation names use lowercase letters, numbers, and single hyphens.',
-    )
-    .describe(
-      `The installed character action to play.\n${describeAnimations(animations)}`,
-    );
-}
+// The catalog belongs to the tool description and only there; repeating it here
+// shipped the same paragraph to the model twice. The name stays deliberately
+// unconstrained -- docs/INTEGRATIONS.md covers why the live check is the gate.
+const ANIMATION_INPUT_SCHEMA = z
+  .string()
+  .regex(
+    ANIMATION_NAME_PATTERN,
+    'Animation names use lowercase letters, numbers, and single hyphens.',
+  )
+  .describe('The installed character action to play.');
 
 export function createPersonaMcpServer({
   onAnimation,
@@ -118,7 +117,7 @@ export function createPersonaMcpServer({
       title: 'Play Persona animation',
       description: animationToolDescription(animations),
       inputSchema: {
-        animation: animationInputSchema(animations),
+        animation: ANIMATION_INPUT_SCHEMA,
       },
       annotations: {
         readOnlyHint: false,
@@ -209,12 +208,8 @@ export function createPersonaMcpServer({
   );
 
   const refreshAnimationCatalog = (): void => {
-    const currentAnimations = getAnimations();
     animationTool.update({
-      description: animationToolDescription(currentAnimations),
-      paramsSchema: {
-        animation: animationInputSchema(currentAnimations),
-      },
+      description: animationToolDescription(getAnimations()),
     });
   };
 
