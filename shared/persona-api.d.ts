@@ -121,12 +121,23 @@ export interface ClickThroughEvent extends ClickThroughSnapshot {
   type: 'click-through';
 }
 
+/**
+ * Asks the renderer to frame the character again from scratch. Orbit controls
+ * are unbounded, so a pan can put the character outside the viewport with no
+ * way back; the camera is the renderer's to fix, while the window position the
+ * same gesture may have wrecked is the main process's.
+ */
+export interface ResetViewEvent {
+  type: 'reset-view';
+}
+
 export type AvatarRendererEvent =
   | BridgeEvent
   | AnimationPlaybackEvent
   | ExpressionHoldEvent
   | ExpressionReleaseEvent
-  | ClickThroughEvent;
+  | ClickThroughEvent
+  | ResetViewEvent;
 
 export interface PersonaLightingSettings {
   tone_mapping: 'none' | 'aces';

@@ -67,6 +67,7 @@ import {
   getHyprlandWindowPlacement,
   type WindowPosition,
 } from './hyprland-window.cjs';
+import { clampWindowPosition } from './window-bounds.cjs';
 import {
   createAudioListener,
   type AudioListener,
@@ -194,15 +195,27 @@ function debugLog(...values: unknown[]): void {
   if (debugEnabled) console.error("[persona]", ...values);
 }
 
-function positionWindow(window: BrowserWindow): void {
+/**
+ * The corner the avatar launches in, on the display the cursor is on.
+ *
+ * Sized from the settings rather than from `getBounds()`: a resize is applied
+ * by the window manager asynchronously on X11, so bounds read straight after
+ * `setSize` can still describe the old window and offset the corner by the
+ * difference.
+ */
+function avatarCornerPosition(): WindowPosition {
   const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-  const bounds = window.getBounds();
+  const { width, height } = avatarWindowSize();
   const margin = 24;
-  window.setPosition(
-    Math.round(display.workArea.x + display.workArea.width - bounds.width - margin),
-    Math.round(display.workArea.y + display.workArea.height - bounds.height - margin),
-    false,
-  );
+  return {
+    x: Math.round(display.workArea.x + display.workArea.width - width - margin),
+    y: Math.round(display.workArea.y + display.workArea.height - height - margin),
+  };
+}
+
+function positionWindow(window: BrowserWindow): void {
+  const { x, y } = avatarCornerPosition();
+  window.setPosition(x, y, false);
 }
 
 function hasConfiguredModel(): boolean {
@@ -311,6 +324,55 @@ async function hideOverlay(): Promise<void> {
     hyprlandLastPosition = { x: placement.x, y: placement.y };
   }
   targetWindow.hide();
+}
+
+/**
+ * Frames the character again from scratch.
+ *
+ * Deliberately not `sendToRenderer`: that queues the event for replay to a
+ * renderer that has not loaded yet, and a renderer still loading will frame the
+ * character correctly on its own. A reset replayed after the fact is noise.
+ */
+function sendResetView(): void {
+  if (!avatarWindow || avatarWindow.isDestroyed()) return;
+  if (avatarWindow.webContents.isLoading()) return;
+  const event: AvatarRendererEvent = { type: "reset-view" };
+  avatarWindow.webContents.send("persona:event", event);
+}
+
+/**
+ * Puts the avatar back where it starts, in both senses: the window returns to
+ * the corner it launches in and the camera re-frames the character. Orbit
+ * controls are unbounded and the window is frameless, so a pan and a drag can
+ * between them leave nothing on screen to aim a correction at -- which is why
+ * this lives on the tray rather than on the window it repairs.
+ */
+function recenterAvatar(): void {
+  // Sampled once and shared by every path below. Each call reads the cursor
+  // afresh, so a pointer crossing a display boundary between two of them would
+  // aim Electron at one monitor and Hyprland at another.
+  const corner = avatarCornerPosition();
+  // Showing the window replays the last recorded placement, which on this path
+  // is the stranded spot being escaped from, and that handler and this function
+  // race to schedule the Hyprland move -- `show` arrives asynchronously on GTK,
+  // and the scheduler is last-writer-wins. Recording the corner up front makes
+  // both of them ask for the same move, so whichever lands is the right one.
+  hyprlandLastPosition = corner;
+  showOverlay();
+  const window = avatarWindow;
+  if (!window || window.isDestroyed()) return;
+  applyAvatarWindowSize();
+  window.setPosition(corner.x, corner.y, false);
+  // Hyprland places floating windows itself, and both options have to be given
+  // rather than left to their defaults: `reposition` is false once the window
+  // has been configured, and a null `position` falls back to the corner of the
+  // monitor the window is currently on -- the one being escaped from.
+  scheduleHyprlandWindowConfiguration({
+    force: true,
+    position: corner,
+    reposition: true,
+  });
+  sendResetView();
 }
 
 function destroyOverlayForSetup(): void {
@@ -1077,6 +1139,7 @@ function refreshTrayMenu(): void {
     ? [
         { label: "Show Persona", click: () => showOverlay({ focus: true }) },
         { label: "Hide Persona", click: () => void hideOverlay() },
+        { label: "Recenter Persona", click: recenterAvatar },
         { label: "Settings…", click: showSettings },
         { type: "separator" },
         {
@@ -1572,10 +1635,13 @@ if (!app.requestSingleInstanceLock()) {
         return;
       }
       const bounds = avatarWindow.getBounds();
-      avatarWindow.setPosition(
-        Math.round(bounds.x + dx),
-        Math.round(bounds.y + dy),
+      // A frameless window offers no titlebar to drag it back with, so a drag
+      // that carried it off every display would leave nothing to grab.
+      const position = clampWindowPosition(
+        { ...bounds, x: bounds.x + dx, y: bounds.y + dy },
+        screen.getAllDisplays().map((display) => display.workArea),
       );
+      avatarWindow.setPosition(position.x, position.y);
     });
     // The renderer owns the fine-grained decision, forwarding a silhouette
     // hit-test as the cursor moves. A send has no reply channel to reject
