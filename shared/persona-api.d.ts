@@ -122,10 +122,8 @@ export interface ClickThroughEvent extends ClickThroughSnapshot {
 }
 
 /**
- * Asks the renderer to frame the character again from scratch. Orbit controls
- * are unbounded, so a pan can put the character outside the viewport with no
- * way back; the camera is the renderer's to fix, while the window position the
- * same gesture may have wrecked is the main process's.
+ * Asks the renderer to frame the character again. A pan can put it outside the
+ * viewport with no way back, and the camera is the renderer's half of the fix.
  */
 export interface ResetViewEvent {
   type: 'reset-view';

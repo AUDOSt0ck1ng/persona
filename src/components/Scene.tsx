@@ -120,9 +120,7 @@ function FullBodyCamera({
   useLayoutEffect(() => {
     const { camera, controls } = getThreeState();
     // Nothing the user does to the camera is recorded here, so a framing that
-    // matches what was last computed can still be pointing somewhere else
-    // entirely. A bumped request is the one signal that the current view is
-    // wrong however well it matches, and it has to outrank the other three.
+    // matches the last computed one can still be pointing somewhere else.
     const requested = framedRequest.current !== resetRequest;
     if (
       !object ||

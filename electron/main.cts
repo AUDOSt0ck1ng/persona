@@ -196,12 +196,9 @@ function debugLog(...values: unknown[]): void {
 }
 
 /**
- * The corner the avatar launches in, on the display the cursor is on.
- *
- * Sized from the settings rather than from `getBounds()`: a resize is applied
- * by the window manager asynchronously on X11, so bounds read straight after
- * `setSize` can still describe the old window and offset the corner by the
- * difference.
+ * The corner the avatar launches in, on the display the cursor is on. Sized
+ * from settings rather than `getBounds()`: an X11 resize lands asynchronously,
+ * so bounds read straight after `setSize` can still describe the old window.
  */
 function avatarCornerPosition(): WindowPosition {
   const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
@@ -327,11 +324,8 @@ async function hideOverlay(): Promise<void> {
 }
 
 /**
- * Frames the character again from scratch.
- *
- * Deliberately not `sendToRenderer`: that queues the event for replay to a
- * renderer that has not loaded yet, and a renderer still loading will frame the
- * character correctly on its own. A reset replayed after the fact is noise.
+ * Deliberately not `sendToRenderer`: that queues for replay to a renderer that
+ * has not loaded, and one still loading frames the character correctly anyway.
  */
 function sendResetView(): void {
   if (!avatarWindow || avatarWindow.isDestroyed()) return;
@@ -341,32 +335,23 @@ function sendResetView(): void {
 }
 
 /**
- * Puts the avatar back where it starts, in both senses: the window returns to
- * the corner it launches in and the camera re-frames the character. Orbit
- * controls are unbounded and the window is frameless, so a pan and a drag can
- * between them leave nothing on screen to aim a correction at -- which is why
- * this lives on the tray rather than on the window it repairs.
+ * A pan and a drag can between them leave nothing on screen to aim a
+ * correction at, which is why this lives on the tray and not on the window.
  */
 function recenterAvatar(): void {
-  // Sampled once and shared by every path below. Each call reads the cursor
-  // afresh, so a pointer crossing a display boundary between two of them would
-  // aim Electron at one monitor and Hyprland at another.
+  // One sample shared by all three paths below: each read takes the cursor
+  // afresh, and a pointer crossing displays between them would split them.
   const corner = avatarCornerPosition();
-  // Showing the window replays the last recorded placement, which on this path
-  // is the stranded spot being escaped from, and that handler and this function
-  // race to schedule the Hyprland move -- `show` arrives asynchronously on GTK,
-  // and the scheduler is last-writer-wins. Recording the corner up front makes
-  // both of them ask for the same move, so whichever lands is the right one.
+  // Showing the window replays the last placement -- here, the stranded spot
+  // being escaped from -- so aim that path at the corner as well.
   hyprlandLastPosition = corner;
   showOverlay();
   const window = avatarWindow;
   if (!window || window.isDestroyed()) return;
   applyAvatarWindowSize();
   window.setPosition(corner.x, corner.y, false);
-  // Hyprland places floating windows itself, and both options have to be given
-  // rather than left to their defaults: `reposition` is false once the window
-  // has been configured, and a null `position` falls back to the corner of the
-  // monitor the window is currently on -- the one being escaped from.
+  // Neither default is right here: `reposition` is false once the window has
+  // been configured, and a null `position` means the monitor it is stranded on.
   scheduleHyprlandWindowConfiguration({
     force: true,
     position: corner,
@@ -1635,8 +1620,8 @@ if (!app.requestSingleInstanceLock()) {
         return;
       }
       const bounds = avatarWindow.getBounds();
-      // A frameless window offers no titlebar to drag it back with, so a drag
-      // that carried it off every display would leave nothing to grab.
+      // No titlebar to drag it back with, so a drag off every display would
+      // leave nothing to grab.
       const position = clampWindowPosition(
         { ...bounds, x: bounds.x + dx, y: bounds.y + dy },
         screen.getAllDisplays().map((display) => display.workArea),

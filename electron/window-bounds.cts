@@ -1,11 +1,7 @@
 /**
- * Keeps a dragged avatar window reachable.
- *
- * The window is frameless, so no window manager offers a titlebar to drag it
- * back with, and Alt+drag over the character is the only way to move it. Put
- * the whole window past the edge of every display and that gesture has nothing
- * left to land on, and nothing is drawn on screen to aim a correction at
- * either. Clamping the destination keeps the window where it can still be seen.
+ * The window is frameless and Alt+drag over the character is the only way to
+ * move it, so a drag that put it past every display would leave nothing on
+ * screen to aim at. Clamping the destination keeps it visible.
  */
 
 export interface ScreenRect {
@@ -21,15 +17,9 @@ export interface WindowPosition {
 }
 
 /**
- * How much of the window has to stay inside a work area.
- *
- * Wide enough to aim at rather than a sliver that is only technically on
- * screen. It does not by itself guarantee the window can be dragged back:
- * Alt+drag lands on the character, and under silhouette click-through a strip
- * of transparent background passes the press to whatever is behind it. What
- * this buys is that the window stays visible and stays partly addressable, so
- * recovery is a drag whenever the character reaches the strip and the tray's
- * recentre otherwise.
+ * How much of the window stays inside a work area. Not a guarantee it can be
+ * dragged back: under silhouette click-through the surviving strip is
+ * transparent and passes the press through, which is what the tray is for.
  */
 export const MIN_VISIBLE_EDGE = 64;
 
@@ -56,11 +46,8 @@ function clamp(value: number, low: number, high: number): number {
 }
 
 /**
- * The position `bounds` should actually be moved to.
- *
- * Every work area is considered rather than only the primary one, so a window
- * living on a second display is judged against the display it is on instead of
- * being dragged back across the desktop for being far from the first.
+ * Every work area is weighed rather than only the primary, so a window living
+ * on a second display is judged against the display it is on.
  */
 export function clampWindowPosition(
   bounds: ScreenRect,
@@ -70,8 +57,7 @@ export function clampWindowPosition(
   const requested = { x: Math.round(bounds.x), y: Math.round(bounds.y) };
   if (workAreas.length === 0) return requested;
 
-  // A window shorter or narrower than the margin can never overlap by the whole
-  // margin, so ask it for as much of itself as there is.
+  // A window smaller than the margin cannot overlap by the whole margin.
   const keepX = Math.min(keep, bounds.width);
   const keepY = Math.min(keep, bounds.height);
 

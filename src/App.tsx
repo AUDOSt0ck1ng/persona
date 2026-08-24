@@ -59,8 +59,8 @@ export function App() {
   } | null>(null);
   const [settings, setSettings] =
     useState<PersonaSettingsSnapshot>(SETTINGS_FALLBACK);
-  // A counter rather than a flag: each reset has to reach the camera even when
-  // the one before it left the framing already correct.
+  // A counter, not a flag: a reset must reach the camera even when the one
+  // before it left the framing correct.
   const [resetRequest, setResetRequest] = useState(0);
 
   useEffect(() => {
