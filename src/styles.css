@@ -901,10 +901,54 @@ button {
   background: var(--accent-soft);
 }
 
-.row-mark img {
+.row-mark > img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.row-mark-zoomable {
+  cursor: zoom-in;
+}
+
+/* Fixed rather than absolute: the card sets overflow: hidden, which would
+   otherwise clip the zoom to the 34px thumbnail. */
+.vroid-portrait-zoom {
+  position: fixed;
+  z-index: 95;
+  display: flex;
+  width: 224px;
+  height: 224px;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  background: var(--bg-overlay);
+  pointer-events: none;
+  box-shadow: var(--shadow-overlay);
+  animation: fade-in 120ms var(--ease);
+}
+
+.vroid-portrait-zoom img {
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+  border-radius: var(--r-md);
+  object-fit: contain;
+}
+
+.vroid-portrait-zoom small {
+  overflow: hidden;
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  font-weight: 400;
+  letter-spacing: normal;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .row-copy {

@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
 import { vroidLicenseRows } from '../../vroid-license-fields';
 import {
+  type PortraitZoomPlacement,
+  portraitZoomPlacement,
+} from '../../vroid-portrait-zoom';
+import {
   cachedVroidPortrait,
   hasCachedVroidPortrait,
   requestVroidPortrait,
@@ -14,6 +18,7 @@ function VroidCharacterPortrait({
   const [portrait, setPortrait] = useState<string | null>(() =>
     cachedVroidPortrait(character.id),
   );
+  const [zoom, setZoom] = useState<PortraitZoomPlacement | null>(null);
 
   useEffect(() => {
     const bridge = window.personaVroidHub;
@@ -36,6 +41,19 @@ function VroidCharacterPortrait({
     };
   }, [character.id, character.portrait_url]);
 
+  // The zoom holds the position the thumbnail had when it opened, so anything
+  // that moves the card underneath it closes the zoom instead.
+  useEffect(() => {
+    if (zoom == null) return;
+    const close = () => setZoom(null);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => {
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
+  }, [zoom]);
+
   if (portrait == null) {
     return (
       <span aria-hidden="true" className="row-mark">
@@ -44,8 +62,25 @@ function VroidCharacterPortrait({
     );
   }
   return (
-    <span className="row-mark">
+    <span
+      className="row-mark row-mark-zoomable"
+      onMouseEnter={(event) =>
+        setZoom(
+          portraitZoomPlacement(event.currentTarget.getBoundingClientRect(), {
+            height: window.innerHeight,
+            width: window.innerWidth,
+          }),
+        )
+      }
+      onMouseLeave={() => setZoom(null)}
+    >
       <img alt={`${character.name} portrait`} src={portrait} />
+      {zoom && (
+        <span aria-hidden="true" className="vroid-portrait-zoom" style={zoom}>
+          <img alt="" src={portrait} />
+          <small>{character.name}</small>
+        </span>
+      )}
     </span>
   );
 }
