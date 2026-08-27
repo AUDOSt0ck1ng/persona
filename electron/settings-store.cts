@@ -16,6 +16,7 @@ import type {
   PersonaAnimationClipSettings,
   PersonaAnimationSettings,
   PersonaAvatarWindowSize,
+  PersonaCursorGazeSettings,
   PersonaLightingSettings,
   PersonaModelSettings,
   PersonaSettingsSnapshot,
@@ -55,6 +56,8 @@ interface SettingsState {
   character_size: number;
   avatar_window: AvatarWindowSize;
   click_through_enabled: boolean;
+  look_at_cursor: boolean;
+  cursor_gaze: CursorGaze;
   developer_settings_enabled: boolean;
   vroid_hub_allow_plaintext_storage: boolean;
   body_transition_ms: number;
@@ -99,6 +102,8 @@ export interface SettingsStore {
   setActiveHubModel(buffer: Buffer, metadata?: { model_name?: unknown }): SettingsSnapshot;
   setAvatarWindowSize(width: unknown, height: unknown): SettingsSnapshot;
   setClickThroughEnabled(value: unknown): SettingsSnapshot;
+  setLookAtCursor(value: unknown): SettingsSnapshot;
+  setCursorGaze(value: unknown): SettingsSnapshot;
   setCharacterSize(value: unknown): SettingsSnapshot;
   setSpeakingTransition(value: unknown): SettingsSnapshot;
   setBodyTransitionMs(value: unknown): SettingsSnapshot;
@@ -125,6 +130,19 @@ export const MIN_AVATAR_WINDOW_WIDTH = 320;
 export const MAX_AVATAR_WINDOW_WIDTH = 2160;
 export const MIN_AVATAR_WINDOW_HEIGHT = 480;
 export const MAX_AVATAR_WINDOW_HEIGHT = 3840;
+// Bounds for the cursor gaze the Settings sliders offer. The far radius stays
+// clear of the near one the gaze holds internally, so no saved value can leave
+// the two crossed over, which would read as no attention anywhere.
+export const MIN_GAZE_REACTION_SIZE = 1;
+export const MAX_GAZE_REACTION_SIZE = 6;
+export const MIN_GAZE_NOTICE_RADIUS = 0.4;
+export const MAX_GAZE_NOTICE_RADIUS = 2.5;
+export const DEFAULT_CURSOR_GAZE = Object.freeze({
+  reaction_size: 3,
+  notice_radius: 0.85,
+  eyes_only_chance: 0.55,
+});
+
 export const DEFAULT_AVATAR_WINDOW_SIZE: Readonly<AvatarWindowSize> = Object.freeze({ width: 430, height: 680 });
 const MAX_ASSET_BYTES = 200 * 1024 * 1024;
 const MAX_CUSTOM_MODELS = 50;
@@ -300,6 +318,47 @@ function sanitizeAvatarWindowSize(value: unknown): AvatarWindowSize {
   return { width, height };
 }
 
+type CursorGaze = PersonaCursorGazeSettings;
+
+function clampNumber(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+  fallback: number,
+): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(maximum, Math.max(minimum, parsed));
+}
+
+/**
+ * Every field settled independently, so one bad number in a hand-edited file
+ * costs that slider rather than the whole gaze.
+ */
+function sanitizeCursorGaze(value: unknown): CursorGaze {
+  const record = (value ?? {}) as Partial<Record<keyof CursorGaze, unknown>>;
+  return {
+    reaction_size: clampNumber(
+      record.reaction_size,
+      MIN_GAZE_REACTION_SIZE,
+      MAX_GAZE_REACTION_SIZE,
+      DEFAULT_CURSOR_GAZE.reaction_size,
+    ),
+    notice_radius: clampNumber(
+      record.notice_radius,
+      MIN_GAZE_NOTICE_RADIUS,
+      MAX_GAZE_NOTICE_RADIUS,
+      DEFAULT_CURSOR_GAZE.notice_radius,
+    ),
+    eyes_only_chance: clampNumber(
+      record.eyes_only_chance,
+      0,
+      1,
+      DEFAULT_CURSOR_GAZE.eyes_only_chance,
+    ),
+  };
+}
+
 function defaultState(packagedLibrary: PackagedLibrary): SettingsState {
   return {
     schema_version: SETTINGS_SCHEMA_VERSION,
@@ -307,6 +366,8 @@ function defaultState(packagedLibrary: PackagedLibrary): SettingsState {
     character_size: 1,
     avatar_window: { ...DEFAULT_AVATAR_WINDOW_SIZE },
     click_through_enabled: false,
+    look_at_cursor: true,
+    cursor_gaze: { ...DEFAULT_CURSOR_GAZE },
     developer_settings_enabled: false,
     vroid_hub_allow_plaintext_storage: false,
     body_transition_ms: DEFAULT_BODY_TRANSITION_MS,
@@ -704,6 +765,11 @@ function safeReadState(
       character_size: sanitizeCharacterSize(parsed.character_size),
       avatar_window: sanitizeAvatarWindowSize(parsed.avatar_window),
       click_through_enabled: parsed.click_through_enabled === true,
+      // Absent means on, unlike every flag around it. The gaze shipped
+      // enabled, so a settings file written before it existed has to read as
+      // the default rather than as someone having turned it off.
+      look_at_cursor: parsed.look_at_cursor !== false,
+      cursor_gaze: sanitizeCursorGaze(parsed.cursor_gaze),
       developer_settings_enabled: parsed.developer_settings_enabled === true,
       vroid_hub_allow_plaintext_storage:
         parsed.vroid_hub_allow_plaintext_storage === true,
@@ -976,6 +1042,8 @@ export function createSettingsStore({
       character_size: state.character_size,
       avatar_window: sanitizeAvatarWindowSize(state.avatar_window),
       click_through_enabled: state.click_through_enabled === true,
+      look_at_cursor: state.look_at_cursor !== false,
+      cursor_gaze: sanitizeCursorGaze(state.cursor_gaze),
       developer_settings_enabled: state.developer_settings_enabled === true,
       vroid_hub_allow_plaintext_storage:
         state.vroid_hub_allow_plaintext_storage === true,
@@ -1421,6 +1489,16 @@ export function createSettingsStore({
     return getSnapshot();
   }
 
+  function setLookAtCursor(value: unknown): SettingsSnapshot {
+    state.look_at_cursor = value === true;
+    writeState();
+    return getSnapshot();
+  }
+  function setCursorGaze(value: unknown): SettingsSnapshot {
+    state.cursor_gaze = sanitizeCursorGaze(value);
+    writeState();
+    return getSnapshot();
+  }
   function setVroidHubPlaintextStorageAllowed(value: unknown): SettingsSnapshot {
     state.vroid_hub_allow_plaintext_storage = value === true;
     writeState();
@@ -1576,6 +1654,8 @@ export function createSettingsStore({
     setAvatarWindowSize,
     setCharacterSize,
     setClickThroughEnabled,
+    setLookAtCursor,
+    setCursorGaze,
     setSpeakingTransition,
     setBodyTransitionMs,
     setSpeakingDebounceMs,

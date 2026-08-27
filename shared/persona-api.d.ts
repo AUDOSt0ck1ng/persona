@@ -192,12 +192,27 @@ export interface PersonaAvatarWindowSize {
   height: number;
 }
 
+/**
+ * The few parts of the cursor gaze the user is offered. The rest of its tuning
+ * is fixed in the renderer, so this is not the whole shape of the behaviour.
+ */
+export interface PersonaCursorGazeSettings {
+  /** Multiplier on how far the character turns for a given cursor offset. */
+  reaction_size: number;
+  /** How near the cursor has to come, in world units, before she lets go. */
+  notice_radius: number;
+  /** How often a look is a glance the head stays out of, from 0 to 1. */
+  eyes_only_chance: number;
+}
+
 export interface PersonaSettingsSnapshot {
   schema_version: number;
   default_model_id: string | null;
   character_size: number;
   avatar_window: PersonaAvatarWindowSize;
   click_through_enabled: boolean;
+  look_at_cursor: boolean;
+  cursor_gaze: PersonaCursorGazeSettings;
   developer_settings_enabled: boolean;
   vroid_hub_allow_plaintext_storage: boolean;
   body_transition_ms: number;
@@ -332,6 +347,10 @@ export interface PersonaSettingsApi {
    */
   getClickThroughMode(): Promise<ClickThroughMode>;
   setClickThroughEnabled(enabled: boolean): Promise<PersonaSettingsSnapshot>;
+  setLookAtCursor(enabled: boolean): Promise<PersonaSettingsSnapshot>;
+  setCursorGaze(
+    gaze: PersonaCursorGazeSettings,
+  ): Promise<PersonaSettingsSnapshot>;
   setSpeakingTransition(
     transition: PersonaSpeakingTransitionSettings,
   ): Promise<PersonaSettingsSnapshot>;

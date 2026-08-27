@@ -39,6 +39,16 @@ export function drawingBufferPixel(
 }
 
 /**
+ * Whether the character is drawn solidly enough at a sampled pixel to count as
+ * being there. Both the click routing and the cursor shape ask this, so the
+ * threshold has one owner and the two can never disagree about where the
+ * character ends.
+ */
+export function characterCoversAlpha(alpha: number): boolean {
+  return alpha >= SILHOUETTE_ALPHA_THRESHOLD;
+}
+
+/**
  * Whether the avatar window should ignore the mouse at a sampled pixel:
  * anything the character actually drew takes input, the transparent area around
  * it passes through, and a gesture already under way never flips mid-orbit or
@@ -57,7 +67,7 @@ export function passthroughForAlpha({
   gestureActive: boolean;
 }): boolean {
   if (gestureActive) return false;
-  return alpha < SILHOUETTE_ALPHA_THRESHOLD;
+  return !characterCoversAlpha(alpha);
 }
 
 export interface ClickThroughCopy {

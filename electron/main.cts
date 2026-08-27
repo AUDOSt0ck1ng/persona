@@ -1373,6 +1373,14 @@ if (!app.requestSingleInstanceLock()) {
       },
     );
     handleFromSettings(
+      "persona:settings-set-look-at-cursor",
+      (enabled: unknown) => publishSettings(store.setLookAtCursor(enabled)),
+    );
+    handleFromSettings(
+      "persona:settings-set-cursor-gaze",
+      (gaze: unknown) => publishSettings(store.setCursorGaze(gaze)),
+    );
+    handleFromSettings(
       "persona:settings-set-speaking-transition",
       (transition: unknown) =>
         publishSettings(store.setSpeakingTransition(transition)),

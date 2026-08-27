@@ -24,6 +24,25 @@ import {
   animationUrlSignature,
   type PlayableAnimationType,
 } from '../animation-catalog';
+import {
+  advanceExcitement,
+  advanceGaze,
+  advanceGlance,
+  createExcitementState,
+  createGazeState,
+  createGlanceState,
+  GAZE_BONE_WEIGHTS,
+  gazeWeightsFor,
+  isGazeAtRest,
+  reachScaleFor,
+  rigTurnFor,
+  type ExcitementState,
+  type GazeSettings,
+  type GazeState,
+  type GazeTarget,
+  type GlanceState,
+} from '../gaze';
+import { type PointerFocusState } from '../pointer-focus';
 
 // Reused every frame so the render loop allocates nothing.
 const CAMERA_RIGHT = new THREE.Vector3();
@@ -35,8 +54,18 @@ const PARENT_ROTATION = new THREE.Quaternion();
 const LEAN = new THREE.Quaternion();
 const TWIST = new THREE.Quaternion();
 const UP = new THREE.Vector3(0, 1, 0);
+const HEAD_WORLD = new THREE.Vector3();
+const HEAD_SCREEN = new THREE.Vector3();
+const CURSOR_WORLD = new THREE.Vector3();
+const HEAD_FORWARD = new THREE.Vector3();
+const HEAD_ROTATION = new THREE.Quaternion();
+const LOOK_REST = new THREE.Vector3();
+const GAZE_YAW = new THREE.Quaternion();
+const GAZE_PITCH = new THREE.Quaternion();
+const RIGHT = new THREE.Vector3(1, 0, 0);
 
 const TORSO_BONES = TORSO_LEAN_WEIGHTS.map(([name]) => name);
+const GAZE_BONES = GAZE_BONE_WEIGHTS.map(([name]) => name);
 
 function orbitTarget(controls: unknown, fallback: THREE.Vector3): THREE.Vector3 {
   const target = (controls as { target?: unknown } | null)?.target;
@@ -81,6 +110,35 @@ function readTorso(vrm: {
   return length > 0 ? { bones, length } : null;
 }
 
+interface GazeRig {
+  /** Neck and head with their share of the turn; the shares sum to one. */
+  bones: { node: THREE.Object3D; weight: number; pose: THREE.Quaternion }[];
+  /** The head itself, which is what the cursor direction is measured from. */
+  head: THREE.Object3D;
+}
+
+/**
+ * The bones the gaze turns, read off the same normalized rig the torso lean
+ * writes to, for the same reason: that is what `vrm.update` copies onto the
+ * render skeleton.
+ */
+function readGazeRig(vrm: {
+  humanoid: {
+    getNormalizedBoneNode(name: string): THREE.Object3D | null;
+  };
+}): GazeRig | null {
+  const head = vrm.humanoid.getNormalizedBoneNode('head');
+  if (!head) return null;
+  const present = GAZE_BONES.filter(
+    (name) => vrm.humanoid.getNormalizedBoneNode(name) !== null,
+  );
+  const bones = gazeWeightsFor(present).flatMap(([name, weight]) => {
+    const node = vrm.humanoid.getNormalizedBoneNode(name);
+    return node ? [{ node, weight, pose: new THREE.Quaternion() }] : [];
+  });
+  return bones.length > 0 ? { bones, head } : null;
+}
+
 interface AvatarProps {
   animation: PlayableAnimationType;
   animationRequest: number;
@@ -107,6 +165,9 @@ interface AvatarProps {
   idleInterimMs: number;
   speakingTransition: PersonaSpeakingTransitionSettings;
   onReady?: (scene: THREE.Object3D) => void;
+  /** Absent when the character should not watch the cursor. */
+  pointerFocus?: PointerFocusState | undefined;
+  gazeSettings: GazeSettings;
 }
 
 function AvatarModel({
@@ -130,6 +191,8 @@ function AvatarModel({
   idleInterimMs,
   speakingTransition,
   onReady,
+  pointerFocus,
+  gazeSettings,
 }: AvatarProps) {
   const vrm = useVrmLoader(modelUrl);
   const { play, update: updateAnimation } = useVrmAnimation(
@@ -191,13 +254,42 @@ function AvatarModel({
 
   const torsoRef = useRef<Torso | null>(null);
   const lastAzimuth = useRef<number | null>(null);
+  const gazeRigRef = useRef<GazeRig | null>(null);
+  const gazeRef = useRef<GazeState>(createGazeState());
+  const excitementRef = useRef<ExcitementState>(createExcitementState());
+  const glanceRef = useRef<GlanceState>(createGlanceState());
 
   useLayoutEffect(() => {
     torsoRef.current = null;
+    gazeRigRef.current = null;
     // Re-framing jumps the camera, and that jump is not an orbit gesture.
     lastAzimuth.current = null;
     if (vrm) onReady?.(vrm.scene);
   }, [onReady, vrm]);
+
+  // three-vrm aims the eyes at an object in the scene, so the gaze needs a
+  // real node to move rather than a bare position. It lives in the scene
+  // rather than under the model: it is a point in the room the character is
+  // looking at, and parenting it to the head would drag it round with the very
+  // turn it is meant to cause.
+  // three-vrm re-applies the eyes only when the angles it holds change, so a
+  // gaze switched off mid-session would leave them fixed where they last
+  // looked. Centring them on the way out is what makes the setting reversible.
+  useEffect(() => {
+    if (!pointerFocus) return;
+    const gaze = gazeRef.current;
+    const glance = glanceRef.current;
+    const excitement = excitementRef.current;
+    return () => {
+      vrm?.lookAt?.reset();
+      // Everything that eases has to be let go of too. Left where it stood,
+      // the first frame after switching back on applies the angle held at the
+      // moment it went off, and only then eases out of it.
+      Object.assign(gaze, createGazeState());
+      Object.assign(glance, createGlanceState());
+      Object.assign(excitement, createExcitementState());
+    };
+  }, [pointerFocus, vrm]);
 
   useFrame((state, delta) => {
     if (!vrm) return;
@@ -282,20 +374,143 @@ function AvatarModel({
             TWIST.setFromAxisAngle(UP, dragInertia.yaw * weight),
           );
         }
-        // Spring bones simulate against joint world matrices, so the lean has
-        // to be committed before vrm.update runs them for this frame.
-        vrm.scene.updateMatrixWorld(true);
       }
     }
 
+    let gazed: GazeRig | null = null;
+    if (pointerFocus) {
+      const rig = (gazeRigRef.current ??= readGazeRig(vrm));
+      const gaze = gazeRef.current;
+      const lookAt = vrm.lookAt;
+      const { camera } = state;
+
+      if (rig && lookAt) {
+        rig.head.getWorldPosition(HEAD_WORLD);
+        // Which way the face actually points, which is not something to assume:
+        // a VRM 0.x rig faces -Z in its own frame, and `rotateVRM0` corrects
+        // that by turning the scene above the rig rather than the rig itself.
+        // `faceFront` is where three-vrm records the difference.
+        lookAt.getLookAtWorldQuaternion(HEAD_ROTATION);
+        HEAD_FORWARD.copy(lookAt.faceFront).applyQuaternion(HEAD_ROTATION);
+        HEAD_SCREEN.copy(HEAD_WORLD).project(camera);
+
+        // A gesture is the user moving the camera or the window, not pointing
+        // at the character. Following the cursor through it would fight the
+        // lean the same drag is already producing.
+        const watching =
+          pointerFocus.havePointer && !pointerFocus.gestureActive;
+        const excitement = advanceExcitement(
+          excitementRef.current,
+          watching
+            ? { x: pointerFocus.canvasX, y: pointerFocus.canvasY }
+            : null,
+          delta,
+          gazeSettings,
+        );
+
+        let target: GazeTarget | null = null;
+        if (watching && camera instanceof THREE.PerspectiveCamera) {
+          const headX = (HEAD_SCREEN.x * 0.5 + 0.5) * state.size.width;
+          const headY = (HEAD_SCREEN.y * -0.5 + 0.5) * state.size.height;
+          const dx = pointerFocus.canvasX - headX;
+          const dy = pointerFocus.canvasY - headY;
+
+          // The point being looked at sits out by the camera, carried sideways
+          // by however far the cursor is from the head on screen. It has to be
+          // between the viewer and the character rather than back on the
+          // character's own depth: a point level with the head is one the head
+          // can only face by turning a right angle, and a cursor resting on
+          // the face would be a direction of no length at all. Out here, a
+          // cursor on the face asks her to look straight down the lens.
+          const distance = camera.position.distanceTo(HEAD_WORLD);
+          const perPixel = worldPerPixel(
+            distance,
+            camera.fov,
+            state.size.height,
+          );
+          const reach =
+            perPixel *
+            gazeSettings.screenGain *
+            reachScaleFor(excitement, gazeSettings);
+          // Off the camera basis, so the cursor keeps meaning the same place
+          // on screen however far the user has orbited.
+          CAMERA_RIGHT.setFromMatrixColumn(camera.matrixWorld, 0);
+          CAMERA_UP.setFromMatrixColumn(camera.matrixWorld, 1);
+          CURSOR_WORLD.copy(camera.position)
+            .addScaledVector(CAMERA_RIGHT, dx * reach)
+            .addScaledVector(CAMERA_UP, -dy * reach);
+
+          // three-vrm works out the angles from the head to a point, which is
+          // worth deferring to: it takes in which way the rig faces and
+          // whatever the animation has already done to the neck.
+          lookAt.lookAt(CURSOR_WORLD);
+          target = {
+            // In world units, not pixels, so how near the cursor counts as
+            // near scales with how large the character is drawn.
+            distance: Math.hypot(dx, dy) * perPixel,
+            yaw: THREE.MathUtils.DEG2RAD * lookAt.yaw,
+            pitch: THREE.MathUtils.DEG2RAD * lookAt.pitch,
+          };
+        } else {
+          CURSOR_WORLD.copy(HEAD_WORLD).add(HEAD_FORWARD);
+        }
+        advanceGaze(gaze, target, delta, gazeSettings);
+
+        // The eyes go the rest of the way, re-aimed at a point blended back
+        // toward straight ahead by attention. Aiming them at the cursor
+        // outright would leave them unable to let go: three-vrm holds the last
+        // angle it was handed, so a point simply left behind reads as a stare.
+        LOOK_REST.copy(HEAD_WORLD).addScaledVector(
+          HEAD_FORWARD,
+          HEAD_WORLD.distanceTo(CURSOR_WORLD),
+        );
+        lookAt.lookAt(LOOK_REST.lerp(CURSOR_WORLD, gaze.attention));
+
+        // How much of this look the head is joining in with. The eyes have
+        // already been aimed above and go the whole way regardless.
+        const commitment = advanceGlance(
+          glanceRef.current,
+          gaze.attention,
+          delta,
+          gazeSettings,
+        );
+
+        if (!isGazeAtRest(gaze) && commitment > 1e-3) {
+          gazed = rig;
+          const turn = rigTurnFor(
+            gaze.yaw * commitment,
+            gaze.pitch * commitment,
+            lookAt.faceFront.z,
+          );
+          // Tilt first and yaw outermost, the order three-vrm itself uses for
+          // a look, and the one that keeps a turned head from also rolling.
+          for (const { node, weight, pose } of rig.bones) {
+            pose.copy(node.quaternion);
+            node.quaternion
+              .premultiply(
+                GAZE_PITCH.setFromAxisAngle(RIGHT, turn.pitch * weight),
+              )
+              .premultiply(GAZE_YAW.setFromAxisAngle(UP, turn.yaw * weight));
+          }
+        }
+      }
+    }
+
+    // Spring bones simulate against joint world matrices, so the lean and the
+    // gaze have to be committed before vrm.update runs them for this frame.
+    if (leaned || gazed) vrm.scene.updateMatrixWorld(true);
+
     vrm.update(delta);
 
-    // `vrm.update` has copied the lean onto the render skeleton and the springs
-    // have answered it, so it is delivered. Take it back off: three-vrm never
-    // resets the normalized rig, so a lean left in place is layered on again
-    // every frame a clip is not driving that joint.
+    // `vrm.update` has copied both onto the render skeleton and the springs
+    // have answered them, so they are delivered. Take them back off: three-vrm
+    // never resets the normalized rig, so a rotation left in place is layered
+    // on again every frame a clip is not driving that joint.
     if (leaned) {
       for (const { node, pose } of leaned.bones) node.quaternion.copy(pose);
+    }
+    if (gazed) {
+      for (const { node, pose } of gazed.bones) node.quaternion.copy(pose);
     }
   });
 

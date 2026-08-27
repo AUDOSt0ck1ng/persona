@@ -19,6 +19,7 @@ declare global {
   type PersonaVoiceSource = PersonaApi.PersonaVoiceSource;
   type PersonaVoiceSourceCatalog = PersonaApi.PersonaVoiceSourceCatalog;
   type PersonaAvatarWindowSize = PersonaApi.PersonaAvatarWindowSize;
+  type PersonaCursorGazeSettings = PersonaApi.PersonaCursorGazeSettings;
   type PersonaSettingsSnapshot = PersonaApi.PersonaSettingsSnapshot;
   type PersonaMcpStatus = PersonaApi.PersonaMcpStatus;
   type CustomAnimationMetadata = PersonaApi.CustomAnimationMetadata;

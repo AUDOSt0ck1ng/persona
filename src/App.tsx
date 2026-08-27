@@ -200,6 +200,9 @@ export function App() {
         audioLevel={audioLevel}
         bodySpeaking={bodySpeaking}
         characterSize={settings.character_size}
+        grabCursor
+        cursorGaze={settings.cursor_gaze}
+        lookAtCursor={settings.look_at_cursor}
         silhouetteHitTest={silhouetteHitTest}
         dragInertia={dragInertia}
         lighting={settings.model_lighting[defaultModel.id] ?? null}
