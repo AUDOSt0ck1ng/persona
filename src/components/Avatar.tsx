@@ -258,6 +258,10 @@ function AvatarModel({
   const gazeRef = useRef<GazeState>(createGazeState());
   const excitementRef = useRef<ExcitementState>(createExcitementState());
   const glanceRef = useRef<GlanceState>(createGlanceState());
+  // The turn this put on the rig last frame, in three-vrm's angles. What it
+  // reports is measured from wherever the head already points, so the previous
+  // frame's turn has to be added back to get an absolute one.
+  const appliedTurn = useRef({ yaw: 0, pitch: 0 });
 
   useLayoutEffect(() => {
     torsoRef.current = null;
@@ -280,6 +284,7 @@ function AvatarModel({
     const gaze = gazeRef.current;
     const glance = glanceRef.current;
     const excitement = excitementRef.current;
+    const turn = appliedTurn.current;
     return () => {
       vrm?.lookAt?.reset();
       // Everything that eases has to be let go of too. Left where it stood,
@@ -288,6 +293,8 @@ function AvatarModel({
       Object.assign(gaze, createGazeState());
       Object.assign(glance, createGlanceState());
       Object.assign(excitement, createExcitementState());
+      turn.yaw = 0;
+      turn.pitch = 0;
     };
   }, [pointerFocus, vrm]);
 
@@ -443,13 +450,23 @@ function AvatarModel({
           // three-vrm works out the angles from the head to a point, which is
           // worth deferring to: it takes in which way the rig faces and
           // whatever the animation has already done to the neck.
+          //
+          // What it reports is how much further to turn from where the head is
+          // pointing now, and the turn this made last frame is still on the
+          // raw bones — only the normalized ones are put back after
+          // `vrm.update`. Adding that turn back makes the angle an absolute
+          // one again. Left as the remainder, easing toward it would chase a
+          // target that retreats as the head approaches, settling at
+          // `A / (1 + attention * commitment)` — half the asked-for turn at
+          // full commitment, and a different fraction for every draw.
           lookAt.lookAt(CURSOR_WORLD);
+          const applied = appliedTurn.current;
           target = {
             // In world units, not pixels, so how near the cursor counts as
             // near scales with how large the character is drawn.
             distance: Math.hypot(dx, dy) * perPixel,
-            yaw: THREE.MathUtils.DEG2RAD * lookAt.yaw,
-            pitch: THREE.MathUtils.DEG2RAD * lookAt.pitch,
+            yaw: THREE.MathUtils.DEG2RAD * lookAt.yaw + applied.yaw,
+            pitch: THREE.MathUtils.DEG2RAD * lookAt.pitch + applied.pitch,
           };
         } else {
           CURSOR_WORLD.copy(HEAD_WORLD).add(HEAD_FORWARD);
@@ -475,8 +492,17 @@ function AvatarModel({
           gazeSettings,
         );
 
+        // Recorded in three-vrm's own angles rather than the rig's, since that
+        // is what next frame has to add back. The shares sum to one and these
+        // angles are small, so the neck and head composing rather than summing
+        // is a difference well under the eased step it feeds.
+        appliedTurn.current.yaw = 0;
+        appliedTurn.current.pitch = 0;
+
         if (!isGazeAtRest(gaze) && commitment > 1e-3) {
           gazed = rig;
+          appliedTurn.current.yaw = gaze.yaw * commitment;
+          appliedTurn.current.pitch = gaze.pitch * commitment;
           const turn = rigTurnFor(
             gaze.yaw * commitment,
             gaze.pitch * commitment,
