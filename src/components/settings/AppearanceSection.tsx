@@ -3,7 +3,6 @@ import { singleRangeStyle } from '../../range-slider';
 import {
   MAX_AVATAR_WINDOW_HEIGHT,
   MAX_AVATAR_WINDOW_WIDTH,
-  DEFAULT_CURSOR_GAZE,
   MAX_GAZE_NOTICE_RADIUS,
   MAX_GAZE_REACTION_SIZE,
   MIN_AVATAR_WINDOW_HEIGHT,
@@ -19,8 +18,6 @@ const GAZE_SLIDERS: readonly {
   label: string;
   min: number;
   max: number;
-  /** The middle mark on the scale, which is what the character ships with. */
-  base: number;
   step: number;
   format: (value: number) => string;
 }[] = [
@@ -29,7 +26,6 @@ const GAZE_SLIDERS: readonly {
     label: 'Reaction size',
     min: MIN_GAZE_REACTION_SIZE,
     max: MAX_GAZE_REACTION_SIZE,
-    base: DEFAULT_CURSOR_GAZE.reaction_size,
     step: 0.1,
     format: (value) => `${value.toFixed(1)}x`,
   },
@@ -38,7 +34,6 @@ const GAZE_SLIDERS: readonly {
     label: 'Notices within',
     min: MIN_GAZE_NOTICE_RADIUS,
     max: MAX_GAZE_NOTICE_RADIUS,
-    base: DEFAULT_CURSOR_GAZE.notice_radius,
     step: 0.05,
     format: (value) => `${value.toFixed(2)}m`,
   },
@@ -47,7 +42,6 @@ const GAZE_SLIDERS: readonly {
     label: 'Eyes-only glances',
     min: 0,
     max: 1,
-    base: DEFAULT_CURSOR_GAZE.eyes_only_chance,
     step: 0.05,
     format: (value) => `${Math.round(value * 100)}%`,
   },
@@ -394,9 +388,12 @@ export function AppearanceSection({
                 type="range"
                 value={settings.cursor_gaze[slider.field]}
               />
+              {/* min, midpoint, max: three evenly spaced numbers under a
+                  track read as a scale, so the middle one has to be the
+                  middle of the range rather than the shipped default. */}
               <div className="slider-labels">
                 <span>{slider.format(slider.min)}</span>
-                <span>{slider.format(slider.base)}</span>
+                <span>{slider.format((slider.min + slider.max) / 2)}</span>
                 <span>{slider.format(slider.max)}</span>
               </div>
             </label>
