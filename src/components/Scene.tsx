@@ -39,6 +39,8 @@ interface SceneProps {
   modelUrl: string;
   onAnimationComplete: () => void;
   playback: 'loop' | 'once';
+  /** Increments to ask the camera to frame the character again. */
+  resetRequest?: number;
   speaking: boolean;
   bodyTransitionMs: number;
   speakingDebounceMs: number;
@@ -101,22 +103,29 @@ function FullBodyCamera({
   characterSize,
   framingMargin,
   object,
+  resetRequest,
 }: {
   characterSize: number;
   framingMargin: number;
   object: THREE.Object3D | null;
+  resetRequest: number;
 }) {
   const getThreeState = useThree((state) => state.get);
   const controlsReady = useThree((state) => Boolean(state.controls));
   const framedObject = useRef<THREE.Object3D | null>(null);
   const framedCharacterSize = useRef<number | null>(null);
   const framedMargin = useRef<number | null>(null);
+  const framedRequest = useRef(resetRequest);
 
   useLayoutEffect(() => {
     const { camera, controls } = getThreeState();
+    // Nothing the user does to the camera is recorded here, so a framing that
+    // matches the last computed one can still be pointing somewhere else.
+    const requested = framedRequest.current !== resetRequest;
     if (
       !object ||
-      (framedObject.current === object &&
+      (!requested &&
+        framedObject.current === object &&
         framedCharacterSize.current === characterSize &&
         framedMargin.current === framingMargin) ||
       !(camera instanceof THREE.PerspectiveCamera) ||
@@ -147,7 +156,15 @@ function FullBodyCamera({
     framedObject.current = object;
     framedCharacterSize.current = characterSize;
     framedMargin.current = framingMargin;
-  }, [characterSize, controlsReady, framingMargin, getThreeState, object]);
+    framedRequest.current = resetRequest;
+  }, [
+    characterSize,
+    controlsReady,
+    framingMargin,
+    getThreeState,
+    object,
+    resetRequest,
+  ]);
 
   return null;
 }
@@ -365,6 +382,7 @@ export function Scene(props: SceneProps) {
         characterSize={props.characterSize}
         framingMargin={props.framingMargin ?? 1.12}
         object={avatarScene}
+        resetRequest={props.resetRequest ?? 0}
       />
       <Avatar {...props} onReady={handleAvatarReady} />
       <PassthroughController enabled={props.silhouetteHitTest ?? false} />

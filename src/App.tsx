@@ -59,6 +59,9 @@ export function App() {
   } | null>(null);
   const [settings, setSettings] =
     useState<PersonaSettingsSnapshot>(SETTINGS_FALLBACK);
+  // A counter, not a flag: a reset must reach the camera even when the one
+  // before it left the framing correct.
+  const [resetRequest, setResetRequest] = useState(0);
 
   useEffect(() => {
     const bridge = window.personaBridge;
@@ -109,6 +112,8 @@ export function App() {
         }
       } else if (event.type === 'click-through') {
         setSilhouetteHitTest(event.enabled && event.mode === 'silhouette');
+      } else if (event.type === 'reset-view') {
+        setResetRequest((request) => request + 1);
       }
     });
   }, []);
@@ -201,6 +206,7 @@ export function App() {
         modelUrl={defaultModel.asset_url}
         onAnimationComplete={handleAnimationComplete}
         playback={bodyOverride ? 'once' : 'loop'}
+        resetRequest={resetRequest}
         speaking={speaking}
         bodyTransitionMs={settings.body_transition_ms}
         speakingDebounceMs={settings.speaking_debounce_ms}

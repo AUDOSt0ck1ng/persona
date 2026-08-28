@@ -55,7 +55,7 @@ Treat signed and notarized artifacts as the production release path.
    - no microphone capture, duplicate sound, or saved audio;
    - close hides without quitting;
    - ending voice leaves the window open;
-   - tray show, hide, preview, and quit;
+   - tray show, hide, recenter, preview, and quit;
    - packaged and user model selection;
    - user model and action creation, multi-file VRMA import, preview,
      persistence, clip deletion, and action deletion;

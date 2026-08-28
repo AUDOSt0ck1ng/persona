@@ -67,6 +67,7 @@ import {
   getHyprlandWindowPlacement,
   type WindowPosition,
 } from './hyprland-window.cjs';
+import { clampWindowPosition } from './window-bounds.cjs';
 import {
   createAudioListener,
   type AudioListener,
@@ -194,15 +195,24 @@ function debugLog(...values: unknown[]): void {
   if (debugEnabled) console.error("[persona]", ...values);
 }
 
-function positionWindow(window: BrowserWindow): void {
+/**
+ * The corner the avatar launches in, on the display the cursor is on. Sized
+ * from settings rather than `getBounds()`: an X11 resize lands asynchronously,
+ * so bounds read straight after `setSize` can still describe the old window.
+ */
+function avatarCornerPosition(): WindowPosition {
   const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-  const bounds = window.getBounds();
+  const { width, height } = avatarWindowSize();
   const margin = 24;
-  window.setPosition(
-    Math.round(display.workArea.x + display.workArea.width - bounds.width - margin),
-    Math.round(display.workArea.y + display.workArea.height - bounds.height - margin),
-    false,
-  );
+  return {
+    x: Math.round(display.workArea.x + display.workArea.width - width - margin),
+    y: Math.round(display.workArea.y + display.workArea.height - height - margin),
+  };
+}
+
+function positionWindow(window: BrowserWindow): void {
+  const { x, y } = avatarCornerPosition();
+  window.setPosition(x, y, false);
 }
 
 function hasConfiguredModel(): boolean {
@@ -311,6 +321,43 @@ async function hideOverlay(): Promise<void> {
     hyprlandLastPosition = { x: placement.x, y: placement.y };
   }
   targetWindow.hide();
+}
+
+/**
+ * Deliberately not `sendToRenderer`: that queues for replay to a renderer that
+ * has not loaded, and one still loading frames the character correctly anyway.
+ */
+function sendResetView(): void {
+  if (!avatarWindow || avatarWindow.isDestroyed()) return;
+  if (avatarWindow.webContents.isLoading()) return;
+  const event: AvatarRendererEvent = { type: "reset-view" };
+  avatarWindow.webContents.send("persona:event", event);
+}
+
+/**
+ * A pan and a drag can between them leave nothing on screen to aim a
+ * correction at, which is why this lives on the tray and not on the window.
+ */
+function recenterAvatar(): void {
+  // One sample shared by all three paths below: each read takes the cursor
+  // afresh, and a pointer crossing displays between them would split them.
+  const corner = avatarCornerPosition();
+  // Showing the window replays the last placement -- here, the stranded spot
+  // being escaped from -- so aim that path at the corner as well.
+  hyprlandLastPosition = corner;
+  showOverlay();
+  const window = avatarWindow;
+  if (!window || window.isDestroyed()) return;
+  applyAvatarWindowSize();
+  window.setPosition(corner.x, corner.y, false);
+  // Neither default is right here: `reposition` is false once the window has
+  // been configured, and a null `position` means the monitor it is stranded on.
+  scheduleHyprlandWindowConfiguration({
+    force: true,
+    position: corner,
+    reposition: true,
+  });
+  sendResetView();
 }
 
 function destroyOverlayForSetup(): void {
@@ -1077,6 +1124,7 @@ function refreshTrayMenu(): void {
     ? [
         { label: "Show Persona", click: () => showOverlay({ focus: true }) },
         { label: "Hide Persona", click: () => void hideOverlay() },
+        { label: "Recenter Persona", click: recenterAvatar },
         { label: "Settings…", click: showSettings },
         { type: "separator" },
         {
@@ -1572,10 +1620,13 @@ if (!app.requestSingleInstanceLock()) {
         return;
       }
       const bounds = avatarWindow.getBounds();
-      avatarWindow.setPosition(
-        Math.round(bounds.x + dx),
-        Math.round(bounds.y + dy),
+      // No titlebar to drag it back with, so a drag off every display would
+      // leave nothing to grab.
+      const position = clampWindowPosition(
+        { ...bounds, x: bounds.x + dx, y: bounds.y + dy },
+        screen.getAllDisplays().map((display) => display.workArea),
       );
+      avatarWindow.setPosition(position.x, position.y);
     });
     // The renderer owns the fine-grained decision, forwarding a silhouette
     // hit-test as the cursor moves. A send has no reply channel to reject

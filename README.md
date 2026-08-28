@@ -102,7 +102,9 @@ macOS the character itself still takes orbit, zoom, and Alt+drag as usual; on
 Linux nothing in the window is clickable while it is on, and the tray menu reads
 **Click-through (whole window)** to say so. Toggle it from the tray menu or from
 **Settings → Appearance**; either way the choice is saved and comes back on the
-next launch. The tray toggle is the way back to an interactive window.
+next launch. The tray toggle is the way back to an interactive window. **Recenter
+Persona** in the same menu is the way back if a pan has carried the character
+out of view.
 
 Persona always provides **Idle** and **Speaking** action slots. They begin
 without media, so the model keeps its normal pose until you add clips. Each
@@ -148,6 +150,10 @@ The window intentionally contains no controls:
 - Left-drag to orbit.
 - Right-drag to pan.
 - Use your window manager's move gesture to reposition the window.
+
+If a pan or a drag leaves the character or the window out of reach, **Recenter
+Persona** in the tray returns the window to its launch corner and re-frames the
+character.
 
 On Hyprland, Persona also applies floating, pinned, topmost, full-opacity,
 no-blur, no-shadow, and decoration-free properties. macOS uses an all-Spaces
