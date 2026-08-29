@@ -20,6 +20,7 @@ interface AppearanceSectionProps {
   clickThroughMode: ClickThroughMode | null;
   previewCharacterSize: (size: number) => void;
   previewClickThroughEnabled: (enabled: boolean) => void;
+  previewLookAtCursor: (enabled: boolean) => void;
   previewLighting: PersonaLightingSettings;
   previewLightingField: <Field extends keyof PersonaLightingSettings>(
     field: Field,
@@ -33,6 +34,7 @@ interface AppearanceSectionProps {
   saveAvatarWindowSize: () => Promise<void>;
   saveCharacterSize: (size: number) => Promise<void>;
   saveClickThroughEnabled: (enabled: boolean) => Promise<void>;
+  saveLookAtCursor: (enabled: boolean) => Promise<void>;
   saveLightingField: <Field extends keyof PersonaLightingSettings>(
     field: Field,
     value: PersonaLightingSettings[Field],
@@ -59,6 +61,7 @@ export function AppearanceSection({
   clickThroughMode,
   previewCharacterSize,
   previewClickThroughEnabled,
+  previewLookAtCursor,
   previewLighting,
   previewLightingField,
   previewLightingNumber,
@@ -66,6 +69,7 @@ export function AppearanceSection({
   saveAvatarWindowSize,
   saveCharacterSize,
   saveClickThroughEnabled,
+  saveLookAtCursor,
   saveLightingField,
   saveLightingNumber,
   selectedModel,
@@ -263,6 +267,49 @@ export function AppearanceSection({
         {!bridge && (
           <p className="desktop-note">
             Click-through is available in the Persona desktop app.
+          </p>
+        )}
+      </section>
+
+      <section className="settings-panel appearance-panel">
+        <div className="panel-heading">
+          <div>
+            <h2>Cursor</h2>
+            <p>
+              Let the character notice the pointer, so the window reads as
+              something to reach for rather than a picture.
+            </p>
+          </div>
+        </div>
+        <div className="lighting-toggle-row">
+          <span>Follow the cursor</span>
+          <button
+            aria-checked={settings.look_at_cursor}
+            className={`toggle-switch${settings.look_at_cursor ? ' active' : ''}`}
+            disabled={busy || !bridge}
+            onClick={() => {
+              const next = !settings.look_at_cursor;
+              previewLookAtCursor(next);
+              void saveLookAtCursor(next);
+            }}
+            role="switch"
+            type="button"
+          />
+        </div>
+        <p className="theme-note">
+          The character turns its head and eyes toward the pointer as it comes
+          near, and looks away again once it leaves. How near the pointer has to
+          come is measured against the character's own size, not against the
+          window, so it means the same after a resize.
+        </p>
+        <p className="theme-note">
+          The pointer shows an open hand over the window whether or not this is
+          on. With click-through on it shows one only over the character, so the
+          desktop's own cursor stays visible wherever the click will land there.
+        </p>
+        {!bridge && (
+          <p className="desktop-note">
+            Following the cursor is available in the Persona desktop app.
           </p>
         )}
       </section>

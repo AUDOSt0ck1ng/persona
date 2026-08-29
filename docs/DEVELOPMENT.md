@@ -53,7 +53,7 @@ only way back. Both start off, so an install that never touches the toggle
 behaves exactly as it did before the mode existed.
 
 Only the character's shape can say where the window should take input, and only
-the renderer knows that shape, so `PassthroughController` in
+the renderer knows that shape, so `PointerFocusController` in
 `src/components/Scene.tsx` samples it and reports the result over
 `persona:set-mouse-passthrough`. The main process treats that as advice it may
 drop: results arriving in `whole-window` mode, while the mode is off, or in any
@@ -109,6 +109,49 @@ tells the renderer, and writes the store together, so neither entry point can
 leave the other stale. Applying the flags there rather than waiting for a
 hit-test that may never come is what makes the tray toggle a dependable way back
 to an interactive window.
+
+### Cursor interaction
+
+`PointerFocusController` also feeds the two things that make the window read as
+something to reach for: the cursor shape, and the character's gaze. Neither
+adds a pixel read. With click-through off the whole window takes the click, so
+the canvas is grabbable everywhere and the cursor is set from
+`cursorAffordanceFor` in `src/cursor-affordance.ts` without asking what was
+drawn; only the `silhouette` mode narrows the grab to the character, and that
+mode is already reading the alpha to route clicks. `grab` and `grabbing` rather
+than `pointer`, because a drag orbits and Alt+drag moves the window, and neither
+is a click.
+
+The gaze needs the cursor's position and nothing else. `src/gaze.ts` holds the
+whole of the attention, excitement, and glance arithmetic as plain functions
+over plain state so it can be tested without a rig; `src/components/Avatar.tsx`
+holds only the Three.js half. Three decisions there are worth knowing before
+changing it. Attention is measured in world units, because the avatar window is
+resizable and a radius in pixels would be a different distance at every size.
+The angles come from `VRMLookAt.lookAt` rather than being computed locally,
+since a VRM 0.x rig faces -Z in its own frame while a 1.0 rig faces +Z and
+`VRMUtils.rotateVRM0` corrects that above the rig rather than in it — only the
+conversion back to a bone rotation is local, and the pitch flips with the
+facing. And the head turn is written to the normalized humanoid rig after the
+animation has been advanced, committed with `updateMatrixWorld` so spring bones
+answer it, then taken back off, exactly as the drag-inertia torso lean is:
+three-vrm never resets the normalized rig, so a rotation left in place is
+layered on again every frame.
+
+The eyes always track; the head only sometimes joins in, drawn fresh for each
+look and mostly staying out of it. That is what keeps it from reading as a
+mechanism. The gaze is suppressed while a gesture is under way so it does not
+fight the lean the same drag is producing, and it persists as
+`look_at_cursor` — absent means on, unlike every other stored flag, since it
+shipped enabled. The rest of its tuning is fixed in `DEFAULT_GAZE` rather than
+offered in Settings: it is a coherent set that does not come apart by hand.
+
+Both features see the pointer only through renderer pointer events, so the
+character notices it once it is inside the avatar window and no sooner. On Linux
+under `whole-window` click-through the renderer receives no mouse moves at all,
+so both are inert there until the toggle comes back off. Noticing an approach
+from further out would need the main process to poll
+`screen.getCursorScreenPoint()`, which would also cover that case.
 
 ## Settings and local media
 
@@ -407,7 +450,9 @@ request replacement, pause debounce, Idle interim handling, one-shot actions,
 scheduler cleanup, drawing-buffer sampling, silhouette alpha thresholds and
 the per-mode Settings copy for click-through, drag inertia including
 camera-jump rejection, the lean cap,
-the direction each channel lags in and return-to-rest, plus the Settings
+the direction each channel lags in and return-to-rest, the cursor affordance
+each hit test allows, gaze attention and its return to rest, the excitement a
+cursor's speed is worth, and how often the head joins a look, plus the Settings
 window's own logic: IPC error unwrapping, slider handle constraints, lighting
 field ranges, section descriptors, VRoid character grouping, the MCP tool
 table, and voice-pattern risk detection. Its `include` covers `.tsx` as well as

@@ -111,6 +111,8 @@ const personaSettings = {
     invoke<ClickThroughMode>('persona:settings-get-click-through-mode'),
   setClickThroughEnabled: (enabled: boolean): Promise<SettingsSnapshot> =>
     invoke<SettingsSnapshot>('persona:settings-set-click-through', enabled),
+  setLookAtCursor: (enabled: boolean): Promise<SettingsSnapshot> =>
+    invoke<SettingsSnapshot>('persona:settings-set-look-at-cursor', enabled),
   setSpeakingTransition: (
     transition: SpeakingTransition,
   ): Promise<SettingsSnapshot> =>

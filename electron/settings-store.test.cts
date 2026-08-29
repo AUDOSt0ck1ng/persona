@@ -890,6 +890,37 @@ test("migrates schema 8 scheduler factors and seconds to milliseconds", (context
   });
 });
 
+test("keeps the cursor gaze on for settings written before it existed", (context) => {
+  const { userDataPath, packagedLibraryPath } = fixture(context);
+  fs.mkdirSync(userDataPath, { recursive: true });
+  fs.writeFileSync(
+    path.join(userDataPath, "settings.json"),
+    JSON.stringify({
+      schema_version: 9,
+      models: [],
+      animations: [],
+      animation_clips: {},
+      model_lighting: {},
+    }),
+  );
+
+  // The flag shipped enabled, so its absence is the default rather than a
+  // decision to turn it off. Every other boolean here reads the opposite way.
+  const store = createSettingsStore({ userDataPath, packagedLibraryPath });
+  assert.equal(store.getSnapshot().look_at_cursor, true);
+  assert.equal(store.getSnapshot().click_through_enabled, false);
+
+  assert.equal(store.setLookAtCursor(false).look_at_cursor, false);
+  assert.equal(
+    createSettingsStore({ userDataPath, packagedLibraryPath }).getSnapshot()
+      .look_at_cursor,
+    false,
+  );
+  // Anything but a true turns it off, matching every other stored flag.
+  assert.equal(store.setLookAtCursor("yes").look_at_cursor, false);
+  assert.equal(store.setLookAtCursor(true).look_at_cursor, true);
+});
+
 test("validates animation expression metadata", () => {
   const base = {
     animation_name: "happy",

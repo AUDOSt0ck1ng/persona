@@ -906,6 +906,18 @@ export function SettingsPage() {
     );
   };
 
+  const previewLookAtCursor = (enabled: boolean) => {
+    setSettings((current) => ({ ...current, look_at_cursor: enabled }));
+  };
+
+  const saveLookAtCursor = async (enabled: boolean) => {
+    if (!bridge) return;
+    await persistAppearance(
+      () => bridge.setLookAtCursor(enabled),
+      enabled ? 'Cursor following enabled.' : 'Cursor following disabled.',
+    );
+  };
+
   const previewVroidHubPlaintextStorageAllowed = (allowed: boolean) => {
     setSettings((current) => ({
       ...current,
@@ -1253,6 +1265,7 @@ export function SettingsPage() {
               clickThroughMode={clickThroughMode}
               previewCharacterSize={previewCharacterSize}
               previewClickThroughEnabled={previewClickThroughEnabled}
+              previewLookAtCursor={previewLookAtCursor}
               previewLighting={previewLighting}
               previewLightingField={previewLightingField}
               previewLightingNumber={previewLightingNumber}
@@ -1260,6 +1273,7 @@ export function SettingsPage() {
               saveAvatarWindowSize={saveAvatarWindowSize}
               saveCharacterSize={saveCharacterSize}
               saveClickThroughEnabled={saveClickThroughEnabled}
+              saveLookAtCursor={saveLookAtCursor}
               saveLightingField={saveLightingField}
               saveLightingNumber={saveLightingNumber}
               selectedModel={selectedModel}
@@ -1364,6 +1378,7 @@ export function SettingsPage() {
                   audioLevel={0}
                   bodySpeaking={previewType === 'TALK'}
                   characterSize={settings.character_size}
+                  lookAtCursor={settings.look_at_cursor}
                   lighting={previewLighting}
                   enablePan={false}
                   framingMargin={1.22}

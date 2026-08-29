@@ -55,6 +55,7 @@ interface SettingsState {
   character_size: number;
   avatar_window: AvatarWindowSize;
   click_through_enabled: boolean;
+  look_at_cursor: boolean;
   developer_settings_enabled: boolean;
   vroid_hub_allow_plaintext_storage: boolean;
   body_transition_ms: number;
@@ -99,6 +100,7 @@ export interface SettingsStore {
   setActiveHubModel(buffer: Buffer, metadata?: { model_name?: unknown }): SettingsSnapshot;
   setAvatarWindowSize(width: unknown, height: unknown): SettingsSnapshot;
   setClickThroughEnabled(value: unknown): SettingsSnapshot;
+  setLookAtCursor(value: unknown): SettingsSnapshot;
   setCharacterSize(value: unknown): SettingsSnapshot;
   setSpeakingTransition(value: unknown): SettingsSnapshot;
   setBodyTransitionMs(value: unknown): SettingsSnapshot;
@@ -307,6 +309,7 @@ function defaultState(packagedLibrary: PackagedLibrary): SettingsState {
     character_size: 1,
     avatar_window: { ...DEFAULT_AVATAR_WINDOW_SIZE },
     click_through_enabled: false,
+    look_at_cursor: true,
     developer_settings_enabled: false,
     vroid_hub_allow_plaintext_storage: false,
     body_transition_ms: DEFAULT_BODY_TRANSITION_MS,
@@ -704,6 +707,10 @@ function safeReadState(
       character_size: sanitizeCharacterSize(parsed.character_size),
       avatar_window: sanitizeAvatarWindowSize(parsed.avatar_window),
       click_through_enabled: parsed.click_through_enabled === true,
+      // Absent means on, unlike every flag around it. The gaze shipped
+      // enabled, so a settings file written before it existed has to read as
+      // the default rather than as someone having turned it off.
+      look_at_cursor: parsed.look_at_cursor !== false,
       developer_settings_enabled: parsed.developer_settings_enabled === true,
       vroid_hub_allow_plaintext_storage:
         parsed.vroid_hub_allow_plaintext_storage === true,
@@ -976,6 +983,7 @@ export function createSettingsStore({
       character_size: state.character_size,
       avatar_window: sanitizeAvatarWindowSize(state.avatar_window),
       click_through_enabled: state.click_through_enabled === true,
+      look_at_cursor: state.look_at_cursor !== false,
       developer_settings_enabled: state.developer_settings_enabled === true,
       vroid_hub_allow_plaintext_storage:
         state.vroid_hub_allow_plaintext_storage === true,
@@ -1421,6 +1429,12 @@ export function createSettingsStore({
     return getSnapshot();
   }
 
+  function setLookAtCursor(value: unknown): SettingsSnapshot {
+    state.look_at_cursor = value === true;
+    writeState();
+    return getSnapshot();
+  }
+
   function setVroidHubPlaintextStorageAllowed(value: unknown): SettingsSnapshot {
     state.vroid_hub_allow_plaintext_storage = value === true;
     writeState();
@@ -1576,6 +1590,7 @@ export function createSettingsStore({
     setAvatarWindowSize,
     setCharacterSize,
     setClickThroughEnabled,
+    setLookAtCursor,
     setSpeakingTransition,
     setBodyTransitionMs,
     setSpeakingDebounceMs,

@@ -198,6 +198,8 @@ export interface PersonaSettingsSnapshot {
   character_size: number;
   avatar_window: PersonaAvatarWindowSize;
   click_through_enabled: boolean;
+  /** Whether the character watches the cursor. Its tuning is not offered. */
+  look_at_cursor: boolean;
   developer_settings_enabled: boolean;
   vroid_hub_allow_plaintext_storage: boolean;
   body_transition_ms: number;
@@ -332,6 +334,7 @@ export interface PersonaSettingsApi {
    */
   getClickThroughMode(): Promise<ClickThroughMode>;
   setClickThroughEnabled(enabled: boolean): Promise<PersonaSettingsSnapshot>;
+  setLookAtCursor(enabled: boolean): Promise<PersonaSettingsSnapshot>;
   setSpeakingTransition(
     transition: PersonaSpeakingTransitionSettings,
   ): Promise<PersonaSettingsSnapshot>;

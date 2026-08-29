@@ -152,6 +152,7 @@ export const SETTINGS_FALLBACK: PersonaSettingsSnapshot = {
   character_size: 1,
   avatar_window: { ...DEFAULT_AVATAR_WINDOW_SIZE },
   click_through_enabled: false,
+  look_at_cursor: true,
   developer_settings_enabled: false,
   vroid_hub_allow_plaintext_storage: false,
   body_transition_ms: DEFAULT_BODY_TRANSITION_MS,
