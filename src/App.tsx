@@ -201,7 +201,6 @@ export function App() {
         bodySpeaking={bodySpeaking}
         characterSize={settings.character_size}
         grabCursor
-        cursorGaze={settings.cursor_gaze}
         lookAtCursor={settings.look_at_cursor}
         silhouetteHitTest={silhouetteHitTest}
         dragInertia={dragInertia}

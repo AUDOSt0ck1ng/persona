@@ -106,6 +106,16 @@ next launch. The tray toggle is the way back to an interactive window. **Recente
 Persona** in the same menu is the way back if a pan has carried the character
 out of view.
 
+**Follow the cursor** lets the character notice the pointer: the eyes track it
+as it comes near, the head sometimes joins in, and the character looks away
+again once it leaves. It starts on, and how near the pointer has to come is
+measured against the character's own size rather than the window, so it means
+the same after a resize. The pointer is seen only inside the avatar window, and
+on Linux with click-through on the window receives no mouse moves at all, so
+nothing is noticed there. The pointer itself shows an open hand over the window
+whether or not this is on, since a drag orbits the camera and Alt+drag moves the
+window.
+
 Persona always provides **Idle** and **Speaking** action slots. They begin
 without media, so the model keeps its normal pose until you add clips. Each
 action can contain multiple `.vrma` files; uploads receive numbered names such

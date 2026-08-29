@@ -7,8 +7,8 @@
  * *How near* is measured against the character rather than against the screen.
  * A radius in pixels would be a different distance for every window size and
  * zoom, and the avatar window is resizable: the same radius that reaches a
- * character's shoulders in a small window barely leaves her chin in a large
- * one. Measuring in world units makes the reactive zone scale with her.
+ * character's shoulders in a small window barely reaches the chin in a large
+ * one. Measuring in world units makes the reactive zone scale with the model.
  *
  * *Which way* is not worked out here at all. three-vrm already computes the
  * angles from a head to a point, and it accounts for things that are easy to
@@ -370,23 +370,6 @@ export function advanceGaze(
   state.yaw += (yaw - state.yaw) * factor;
   state.pitch += (pitch - state.pitch) * factor;
   return state;
-}
-
-/**
- * The tuning the character actually runs with: the defaults, with the few
- * values the user is offered laid over them. Everything else stays where it
- * was set, so a saved file can never leave the gaze in a shape nobody chose.
- */
-export function gazeSettingsFor(
-  saved: PersonaCursorGazeSettings | null | undefined,
-): GazeSettings {
-  if (!saved) return DEFAULT_GAZE;
-  return {
-    ...DEFAULT_GAZE,
-    screenGain: saved.reaction_size,
-    farRadius: saved.notice_radius,
-    eyesOnlyChance: saved.eyes_only_chance,
-  };
 }
 
 /** Whether the gaze has eased close enough to rest to stop touching the rig. */

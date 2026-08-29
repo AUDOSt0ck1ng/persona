@@ -3,49 +3,11 @@ import { singleRangeStyle } from '../../range-slider';
 import {
   MAX_AVATAR_WINDOW_HEIGHT,
   MAX_AVATAR_WINDOW_WIDTH,
-  MAX_GAZE_NOTICE_RADIUS,
-  MAX_GAZE_REACTION_SIZE,
   MIN_AVATAR_WINDOW_HEIGHT,
   MIN_AVATAR_WINDOW_WIDTH,
-  MIN_GAZE_NOTICE_RADIUS,
-  MIN_GAZE_REACTION_SIZE,
   type LightingNumberField,
 } from '../../settings-defaults';
 import { THEME_OPTIONS, type ThemePreference } from '../../theme';
-
-const GAZE_SLIDERS: readonly {
-  field: keyof PersonaCursorGazeSettings;
-  label: string;
-  min: number;
-  max: number;
-  step: number;
-  format: (value: number) => string;
-}[] = [
-  {
-    field: 'reaction_size',
-    label: 'Reaction size',
-    min: MIN_GAZE_REACTION_SIZE,
-    max: MAX_GAZE_REACTION_SIZE,
-    step: 0.1,
-    format: (value) => `${value.toFixed(1)}x`,
-  },
-  {
-    field: 'notice_radius',
-    label: 'Notices within',
-    min: MIN_GAZE_NOTICE_RADIUS,
-    max: MAX_GAZE_NOTICE_RADIUS,
-    step: 0.05,
-    format: (value) => `${value.toFixed(2)}m`,
-  },
-  {
-    field: 'eyes_only_chance',
-    label: 'Eyes-only glances',
-    min: 0,
-    max: 1,
-    step: 0.05,
-    format: (value) => `${Math.round(value * 100)}%`,
-  },
-];
 
 interface AppearanceSectionProps {
   avatarHeightInput: string;
@@ -59,10 +21,6 @@ interface AppearanceSectionProps {
   previewCharacterSize: (size: number) => void;
   previewClickThroughEnabled: (enabled: boolean) => void;
   previewLookAtCursor: (enabled: boolean) => void;
-  previewCursorGazeNumber: (
-    field: keyof PersonaCursorGazeSettings,
-    input: HTMLInputElement,
-  ) => void;
   previewLighting: PersonaLightingSettings;
   previewLightingField: <Field extends keyof PersonaLightingSettings>(
     field: Field,
@@ -77,10 +35,6 @@ interface AppearanceSectionProps {
   saveCharacterSize: (size: number) => Promise<void>;
   saveClickThroughEnabled: (enabled: boolean) => Promise<void>;
   saveLookAtCursor: (enabled: boolean) => Promise<void>;
-  saveCursorGazeNumber: (
-    field: keyof PersonaCursorGazeSettings,
-    input: HTMLInputElement,
-  ) => Promise<void>;
   saveLightingField: <Field extends keyof PersonaLightingSettings>(
     field: Field,
     value: PersonaLightingSettings[Field],
@@ -108,7 +62,6 @@ export function AppearanceSection({
   previewCharacterSize,
   previewClickThroughEnabled,
   previewLookAtCursor,
-  previewCursorGazeNumber,
   previewLighting,
   previewLightingField,
   previewLightingNumber,
@@ -117,7 +70,6 @@ export function AppearanceSection({
   saveCharacterSize,
   saveClickThroughEnabled,
   saveLookAtCursor,
-  saveCursorGazeNumber,
   saveLightingField,
   saveLightingNumber,
   selectedModel,
@@ -346,59 +298,15 @@ export function AppearanceSection({
         </div>
         <p className="theme-note">
           The character turns its head and eyes toward the pointer as it comes
-          near, and looks away again once it leaves. The pointer always shows an
-          open hand over the character, whether or not this is on.
+          near, and looks away again once it leaves. How near the pointer has to
+          come is measured against the character's own size, not against the
+          window, so it means the same after a resize.
         </p>
         <p className="theme-note">
-          The distance she notices from is measured against her own size, not
-          against the window, so it means the same after a resize.
+          The pointer shows an open hand over the window whether or not this is
+          on. With click-through on it shows one only over the character, so the
+          desktop's own cursor stays visible wherever the click will land there.
         </p>
-
-        {GAZE_SLIDERS.map((slider) => (
-          <div className="lighting-row" key={slider.field}>
-            <label>
-              <span>
-                {slider.label}
-                <small className="transition-range-state">
-                  {slider.format(settings.cursor_gaze[slider.field])}
-                </small>
-              </span>
-              <input
-                className="single-range-slider"
-                disabled={busy || !bridge || !settings.look_at_cursor}
-                max={slider.max}
-                min={slider.min}
-                onChange={(event) =>
-                  previewCursorGazeNumber(slider.field, event.currentTarget)
-                }
-                onKeyUp={(event) => {
-                  if (event.key.startsWith('Arrow')) {
-                    void saveCursorGazeNumber(slider.field, event.currentTarget);
-                  }
-                }}
-                onPointerUp={(event) =>
-                  void saveCursorGazeNumber(slider.field, event.currentTarget)
-                }
-                step={slider.step}
-                style={singleRangeStyle(
-                  settings.cursor_gaze[slider.field],
-                  slider.min,
-                  slider.max,
-                )}
-                type="range"
-                value={settings.cursor_gaze[slider.field]}
-              />
-              {/* min, midpoint, max: three evenly spaced numbers under a
-                  track read as a scale, so the middle one has to be the
-                  middle of the range rather than the shipped default. */}
-              <div className="slider-labels">
-                <span>{slider.format(slider.min)}</span>
-                <span>{slider.format((slider.min + slider.max) / 2)}</span>
-                <span>{slider.format(slider.max)}</span>
-              </div>
-            </label>
-          </div>
-        ))}
         {!bridge && (
           <p className="desktop-note">
             Following the cursor is available in the Persona desktop app.

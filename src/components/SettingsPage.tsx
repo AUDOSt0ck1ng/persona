@@ -918,39 +918,6 @@ export function SettingsPage() {
     );
   };
 
-  const cursorGazeNumber = (input: HTMLInputElement): number | null => {
-    const value = Number(input.value);
-    return Number.isFinite(value) ? value : null;
-  };
-
-  const previewCursorGazeNumber = (
-    field: keyof PersonaCursorGazeSettings,
-    input: HTMLInputElement,
-  ) => {
-    const value = cursorGazeNumber(input);
-    if (value == null) return;
-    setSettings((current) => ({
-      ...current,
-      cursor_gaze: { ...current.cursor_gaze, [field]: value },
-    }));
-  };
-
-  // Written on release rather than on every step of the drag, the way the
-  // lighting sliders are: the preview above already shows the change live.
-  const saveCursorGazeNumber = async (
-    field: keyof PersonaCursorGazeSettings,
-    input: HTMLInputElement,
-  ) => {
-    if (!bridge) return;
-    const value = cursorGazeNumber(input);
-    if (value == null) return;
-    const next = { ...settings.cursor_gaze, [field]: value };
-    await persistAppearance(
-      () => bridge.setCursorGaze(next),
-      'Cursor following updated.',
-    );
-  };
-
   const previewVroidHubPlaintextStorageAllowed = (allowed: boolean) => {
     setSettings((current) => ({
       ...current,
@@ -1299,7 +1266,6 @@ export function SettingsPage() {
               previewCharacterSize={previewCharacterSize}
               previewClickThroughEnabled={previewClickThroughEnabled}
               previewLookAtCursor={previewLookAtCursor}
-              previewCursorGazeNumber={previewCursorGazeNumber}
               previewLighting={previewLighting}
               previewLightingField={previewLightingField}
               previewLightingNumber={previewLightingNumber}
@@ -1308,7 +1274,6 @@ export function SettingsPage() {
               saveCharacterSize={saveCharacterSize}
               saveClickThroughEnabled={saveClickThroughEnabled}
               saveLookAtCursor={saveLookAtCursor}
-              saveCursorGazeNumber={saveCursorGazeNumber}
               saveLightingField={saveLightingField}
               saveLightingNumber={saveLightingNumber}
               selectedModel={selectedModel}
@@ -1413,7 +1378,6 @@ export function SettingsPage() {
                   audioLevel={0}
                   bodySpeaking={previewType === 'TALK'}
                   characterSize={settings.character_size}
-                  cursorGaze={settings.cursor_gaze}
                   lookAtCursor={settings.look_at_cursor}
                   lighting={previewLighting}
                   enablePan={false}

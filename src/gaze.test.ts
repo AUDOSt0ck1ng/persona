@@ -10,7 +10,6 @@ import {
   createGlanceState,
   DEFAULT_GAZE,
   excitementForSpeed,
-  gazeSettingsFor,
   gazeWeightsFor,
   isGazeAtRest,
   reachScaleFor,
@@ -18,7 +17,6 @@ import {
   smoothingFactor,
 } from './gaze';
 import { definedAt } from './test-support';
-import { MIN_GAZE_NOTICE_RADIUS } from './settings-defaults';
 
 function settle(
   state: ReturnType<typeof createGazeState>,
@@ -30,15 +28,6 @@ function settle(
   }
   return -1;
 }
-
-// The slider's floor is justified in the settings store by this value, which
-// lives here. If the near radius ever climbs past it, every saved radius at the
-// minimum reads as no attention anywhere and the feature quietly stops working.
-describe('the notice radius the sliders offer', () => {
-  it('can never be dragged under the radius attention is full within', () => {
-    expect(MIN_GAZE_NOTICE_RADIUS).toBeGreaterThan(DEFAULT_GAZE.nearRadius);
-  });
-});
 
 describe('attentionForDistance', () => {
   it('is full inside the inner radius and none past the outer', () => {
@@ -469,37 +458,6 @@ describe('advanceGlance', () => {
     advanceGlance(state, 1, FRAME, DEFAULT_GAZE, rolls(0.1));
     expect(state.commitment).toBeLessThan(committed);
     expect(state.commitment).toBeGreaterThan(committed * 0.9);
-  });
-});
-
-describe('gazeSettingsFor', () => {
-  const saved = {
-    reaction_size: 4.5,
-    notice_radius: 1.4,
-    eyes_only_chance: 0.2,
-  };
-
-  it('lays the saved sliders over the defaults', () => {
-    const settings = gazeSettingsFor(saved);
-    expect(settings.screenGain).toBe(4.5);
-    expect(settings.farRadius).toBe(1.4);
-    expect(settings.eyesOnlyChance).toBe(0.2);
-  });
-
-  it('leaves everything the sliders do not offer where it was', () => {
-    const settings = gazeSettingsFor(saved);
-    // Only three of sixteen are exposed; a saved file must not be able to
-    // leave the rest of the gaze in a shape nobody chose.
-    expect(settings.maxYaw).toBe(DEFAULT_GAZE.maxYaw);
-    expect(settings.maxPitch).toBe(DEFAULT_GAZE.maxPitch);
-    expect(settings.nearRadius).toBe(DEFAULT_GAZE.nearRadius);
-    expect(settings.responseSeconds).toBe(DEFAULT_GAZE.responseSeconds);
-    expect(settings.minHoldSeconds).toBe(DEFAULT_GAZE.minHoldSeconds);
-  });
-
-  it('falls back whole when nothing has been saved', () => {
-    expect(gazeSettingsFor(null)).toBe(DEFAULT_GAZE);
-    expect(gazeSettingsFor(undefined)).toBe(DEFAULT_GAZE);
   });
 });
 

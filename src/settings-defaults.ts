@@ -72,18 +72,6 @@ export const DEFAULT_AVATAR_WINDOW_SIZE: PersonaAvatarWindowSize = {
   height: 680,
 };
 
-// Kept in step with the same bounds in electron/settings-store.cts, which is
-// what actually enforces them; these are what the sliders are drawn against.
-export const MIN_GAZE_REACTION_SIZE = 1;
-export const MAX_GAZE_REACTION_SIZE = 6;
-export const MIN_GAZE_NOTICE_RADIUS = 0.4;
-export const MAX_GAZE_NOTICE_RADIUS = 2.5;
-export const DEFAULT_CURSOR_GAZE: PersonaCursorGazeSettings = {
-  reaction_size: 3,
-  notice_radius: 0.85,
-  eyes_only_chance: 0.55,
-};
-
 export const DEFAULT_LIGHTING: PersonaLightingSettings = {
   tone_mapping: 'none',
   exposure: 1,
@@ -165,7 +153,6 @@ export const SETTINGS_FALLBACK: PersonaSettingsSnapshot = {
   avatar_window: { ...DEFAULT_AVATAR_WINDOW_SIZE },
   click_through_enabled: false,
   look_at_cursor: true,
-  cursor_gaze: { ...DEFAULT_CURSOR_GAZE },
   developer_settings_enabled: false,
   vroid_hub_allow_plaintext_storage: false,
   body_transition_ms: DEFAULT_BODY_TRANSITION_MS,

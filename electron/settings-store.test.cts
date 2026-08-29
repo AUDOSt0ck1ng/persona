@@ -4,10 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test, { type TestContext } from 'node:test';
 import {
-  DEFAULT_CURSOR_GAZE,
   DEFAULT_MODEL_LIGHTING,
-  MAX_GAZE_REACTION_SIZE,
-  MIN_GAZE_NOTICE_RADIUS,
   createSettingsStore,
   validateAnimationMetadata,
   validateGlbFile,
@@ -920,57 +917,6 @@ test("keeps the cursor gaze on for settings written before it existed", (context
   // Anything but a true turns it off, matching every other stored flag.
   assert.equal(store.setLookAtCursor("yes").look_at_cursor, false);
   assert.equal(store.setLookAtCursor(true).look_at_cursor, true);
-});
-
-test("clamps cursor gaze sliders and settles each field on its own", (context) => {
-  const { userDataPath, packagedLibraryPath } = fixture(context);
-  fs.mkdirSync(userDataPath, { recursive: true });
-  fs.writeFileSync(
-    path.join(userDataPath, "settings.json"),
-    JSON.stringify({
-      schema_version: 9,
-      models: [],
-      animations: [],
-      animation_clips: {},
-      model_lighting: {},
-      cursor_gaze: {
-        reaction_size: 99,
-        notice_radius: "nonsense",
-        eyes_only_chance: -4,
-      },
-    }),
-  );
-
-  // One unusable field costs that slider, not the whole gaze.
-  const store = createSettingsStore({ userDataPath, packagedLibraryPath });
-  assert.deepEqual(store.getSnapshot().cursor_gaze, {
-    reaction_size: MAX_GAZE_REACTION_SIZE,
-    notice_radius: DEFAULT_CURSOR_GAZE.notice_radius,
-    eyes_only_chance: 0,
-  });
-
-  // The notice radius can never cross under the near radius the gaze holds
-  // internally, which would leave it with no attention anywhere.
-  assert.equal(
-    store.setCursorGaze({ notice_radius: 0 }).cursor_gaze.notice_radius,
-    MIN_GAZE_NOTICE_RADIUS,
-  );
-
-  const saved = store.setCursorGaze({
-    reaction_size: 2.5,
-    notice_radius: 1.2,
-    eyes_only_chance: 0.8,
-  }).cursor_gaze;
-  assert.deepEqual(saved, {
-    reaction_size: 2.5,
-    notice_radius: 1.2,
-    eyes_only_chance: 0.8,
-  });
-  assert.deepEqual(
-    createSettingsStore({ userDataPath, packagedLibraryPath }).getSnapshot()
-      .cursor_gaze,
-    saved,
-  );
 });
 
 test("validates animation expression metadata", () => {

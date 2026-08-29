@@ -2,7 +2,6 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -17,16 +16,16 @@ import * as THREE from 'three';
 import { Avatar } from './Avatar';
 import type { PlayableAnimationType } from '../animation-catalog';
 import { calculateFullBodyFraming } from '../camera-framing';
-import { characterCoversAlpha, drawingBufferPixel } from '../click-through';
+import { drawingBufferPixel, passthroughForAlpha } from '../click-through';
 import {
   cursorAffordanceFor,
   type CursorAffordance,
+  type CursorHitTest,
 } from '../cursor-affordance';
 import {
   createPointerFocusState,
   type PointerFocusState,
 } from '../pointer-focus';
-import { gazeSettingsFor } from '../gaze';
 import type { DragInertiaState } from '../drag-inertia';
 import { resolveLightingSettings } from '../settings-defaults';
 
@@ -65,13 +64,12 @@ interface SceneProps {
   silhouetteHitTest?: boolean;
   /**
    * Whether the cursor reads as grabbable over the character, and whether the
-   * character watches it. Both are off unless asked for: they cost a pixel
-   * read per frame, which the settings preview has no use for.
+   * character watches it. Both are off unless asked for. Settings asks for the
+   * gaze alone, so the toggle can be seen working in the preview; the grab
+   * belongs to the avatar window, which is the thing being taken hold of.
    */
   grabCursor?: boolean;
   lookAtCursor?: boolean;
-  /** Absent falls back to the tuning the renderer ships with. */
-  cursorGaze?: PersonaCursorGazeSettings | null;
 }
 
 interface TargetControls {
@@ -195,29 +193,32 @@ function FullBodyCamera({
 }
 
 /**
- * Samples where the cursor is relative to the character, once per presented
- * frame, and hands the answer to everyone who needs it.
+ * Follows the cursor for everything that needs to know where it is: the click
+ * routing, the cursor shape, and the gaze.
  *
- * Alpha rather than a raycast: the rig is ~29k skinned triangles, and three.js
- * transforms every vertex by its bones on the CPU for each cast, which costs
- * far more than a frame. Reading one pixel is independent of model complexity,
- * and is truer to what the user sees, since alpha-cut hair reads as the
- * background it looks like instead of as the quad it is drawn on.
+ * Only the click routing costs anything. Keeping the window click-through
+ * everywhere except over the character means knowing what the character
+ * actually drew, and that is one `readPixels` of the presented frame; the
+ * cursor shape and the gaze both have their answer without it, so the ordinary
+ * path never reads a pixel.
  *
- * Three things read the result. Click routing keeps the window click-through
- * everywhere except over the character; while the window ignores the mouse
- * Electron still forwards mousemove, so input is handed back only where the
- * character is actually visible. The cursor shape shows the character as
- * something to take hold of. The gaze needs only the position.
+ * Alpha rather than a raycast, where it is read at all: the rig is ~29k skinned
+ * triangles, and three.js transforms every vertex by its bones on the CPU for
+ * each cast, which costs far more than a frame. Reading one pixel is
+ * independent of model complexity, and is truer to what the user sees, since
+ * alpha-cut hair reads as the background it looks like instead of as the quad
+ * it is drawn on.
  */
 function PointerFocusController({
   focus,
   grabCursor,
   passthrough,
+  trackPosition,
 }: {
   focus: PointerFocusState;
   grabCursor: boolean;
   passthrough: boolean;
+  trackPosition: boolean;
 }) {
   const gl = useThree((state) => state.gl);
   const scene = useThree((state) => state.scene);
@@ -229,9 +230,10 @@ function PointerFocusController({
     // contradict the flags the window already has. The cursor shape and the
     // gaze are renderer-only and run either way.
     const routesInput = passthrough && Boolean(bridge?.setMousePassthrough);
-    // Only the alpha costs anything. A mount that neither routes clicks nor
-    // shapes the cursor follows the pointer without ever stalling on a read.
-    const needsAlpha = routesInput || grabCursor;
+    // It is also the only reason to read the alpha: with click-through off the
+    // whole window takes the click, so the cursor may promise a grab anywhere
+    // on the canvas without asking what was drawn under it.
+    const hitTest: CursorHitTest = routesInput ? 'silhouette' : 'window';
 
     const canvas = gl.domElement;
     const context = gl.getContext();
@@ -247,7 +249,7 @@ function PointerFocusController({
 
     const applyCursor = () => {
       if (!grabCursor) return;
-      const next = cursorAffordanceFor(focus);
+      const next = cursorAffordanceFor(focus, hitTest);
       if (next === cursor) return;
       cursor = next;
       canvas.style.cursor = next;
@@ -265,74 +267,90 @@ function PointerFocusController({
     // measured run showed the read costing 1.6-4.5ms of waiting on the GPU
     // without moving frame times off 60Hz at all, because that wait replaces
     // the one the frame would otherwise spend at vsync.
+    // Only what the frame just drew needs asking for here — the alpha, and
+    // where the character has moved to on screen — so a window that neither
+    // routes clicks nor watches the cursor leaves the render alone entirely.
     const previous = scene.onAfterRender;
-    // eslint-disable-next-line react-hooks/immutability
-    scene.onAfterRender = function afterRender(...args) {
-      previous.apply(this, args);
-      // A render into an offscreen target is not the frame the user sees.
-      if (gl.getRenderTarget() !== null) return;
-      // Nothing is decided until a real cursor position has arrived. Deciding
-      // for the seeded origin would answer for a corner whose transparency is
-      // a fact about the current framing rather than anything to rely on, and
-      // the window is already ignoring when the mode turns on, so leaving the
-      // main process's flags standing is the right answer until the first
-      // forwarded move says where the cursor actually is.
-      if (!focus.havePointer) return;
-      // A gesture keeps the window regardless of what is under the cursor, so
-      // the answer is known without the pixel. Reading it anyway would stall
-      // the pipeline once per frame of a drag, which is the motion that most
-      // needs the frames. The stale `overCharacter` is left standing on
-      // purpose: a drag that swings the character out from under the cursor
-      // still belongs to the character.
-      if (focus.gestureActive) {
-        applyPassthrough(false);
-        applyCursor();
-        return;
-      }
+    if (routesInput || trackPosition) {
+      // eslint-disable-next-line react-hooks/immutability
+      scene.onAfterRender = function afterRender(...args) {
+        previous.apply(this, args);
+        // A render into an offscreen target is not the frame the user sees.
+        if (gl.getRenderTarget() !== null) return;
+        // Nothing is decided until a real cursor position has arrived. Deciding
+        // for the seeded origin would answer for a corner whose transparency is
+        // a fact about the current framing rather than anything to rely on, and
+        // the window is already ignoring when the mode turns on, so leaving the
+        // main process's flags standing is the right answer until the first
+        // forwarded move says where the cursor actually is.
+        if (!focus.havePointer) return;
+        // A gesture keeps the window regardless of what is under the cursor, so
+        // the answer is known without the pixel. Reading it anyway would stall
+        // the pipeline once per frame of a drag, which is the motion that most
+        // needs the frames. The stale `overCharacter` is left standing on
+        // purpose: a drag that swings the character out from under the cursor
+        // still belongs to the character.
+        if (focus.gestureActive) {
+          applyPassthrough(false);
+          return;
+        }
 
-      const rect = canvas.getBoundingClientRect();
-      focus.canvasX = focus.clientX - rect.left;
-      focus.canvasY = focus.clientY - rect.top;
-      if (!needsAlpha) return;
+        const rect = canvas.getBoundingClientRect();
+        focus.canvasX = focus.clientX - rect.left;
+        focus.canvasY = focus.clientY - rect.top;
+        if (!routesInput) return;
 
-      const pixel = drawingBufferPixel(
-        rect,
-        { width: canvas.width, height: canvas.height },
-        focus.clientX,
-        focus.clientY,
-      );
-      if (!pixel) {
-        // The cursor is outside the canvas and there is no pixel to read out
-        // there. Nothing outside it is ever drawn, so decide rather than leave
-        // the last decision standing, and drop the position with it: a cursor
-        // that has left is not one the character should still be watching. The
-        // next move to arrive restores it.
-        focus.overCharacter = false;
-        focus.havePointer = false;
-        applyPassthrough(true);
+        const pixel = drawingBufferPixel(
+          rect,
+          { width: canvas.width, height: canvas.height },
+          focus.clientX,
+          focus.clientY,
+        );
+        if (!pixel) {
+          // The cursor is outside the canvas and there is no pixel to read out
+          // there. Nothing outside it is ever drawn, so decide rather than
+          // leave the last decision standing, and drop the position with it: a
+          // cursor that has left is not one the character should still be
+          // watching. The next move to arrive restores it.
+          focus.overCharacter = false;
+          focus.havePointer = false;
+          applyPassthrough(true);
+          applyCursor();
+          return;
+        }
+        context.readPixels(
+          pixel.x,
+          pixel.y,
+          1,
+          1,
+          context.RGBA,
+          context.UNSIGNED_BYTE,
+          sample,
+        );
+        const through = passthroughForAlpha({
+          alpha: sample[3] ?? 0,
+          gestureActive: focus.gestureActive,
+        });
+        // The gesture case returned above, so what the click can still reach
+        // here is the character herself.
+        focus.overCharacter = !through;
+        applyPassthrough(through);
         applyCursor();
-        return;
-      }
-      context.readPixels(
-        pixel.x,
-        pixel.y,
-        1,
-        1,
-        context.RGBA,
-        context.UNSIGNED_BYTE,
-        sample,
-      );
-      focus.overCharacter = characterCoversAlpha(sample[3] ?? 0);
-      applyPassthrough(!focus.overCharacter);
-      applyCursor();
-    };
+      };
+    }
 
     // Pointer events, not mouse events: useWindowDrag cancels `pointerdown` for
     // Alt+drag, which suppresses the compatibility mouse events afterwards, and
     // the cursor position would then freeze until an unrelated click revived
     // it. Captured on window so the same hook's stopPropagation cannot hide
     // them either.
-    const onPointerDown = () => {
+    //
+    // Only a press that lands on the canvas is a gesture. The listener has to
+    // be on the window to hear it at all, but the Settings window puts this
+    // same controller behind a page of controls, and a press on a slider there
+    // is not a drag the character should be looking away from.
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.target !== canvas) return;
       focus.gestureActive = true;
       applyPassthrough(false);
       applyCursor();
@@ -345,9 +363,11 @@ function PointerFocusController({
       focus.clientY = event.clientY;
       focus.havePointer = true;
       if (event.buttons === 0) focus.gestureActive = false;
+      applyCursor();
     };
     const onPointerUp = (event: PointerEvent) => {
       if (event.buttons === 0) focus.gestureActive = false;
+      applyCursor();
     };
     // A cancelled pointer never reports a release: a compositor gesture
     // takeover or a lifted touch contact leaves no `pointerup`, and for touch
@@ -356,6 +376,7 @@ function PointerFocusController({
     // tray toggle as the only way out.
     const onPointerCancel = () => {
       focus.gestureActive = false;
+      applyCursor();
     };
     // The cursor can leave the window without ever landing outside the canvas
     // on a rendered frame, so the out-of-canvas branch above does not on its
@@ -367,6 +388,11 @@ function PointerFocusController({
     // root to whatever element was left, so a captured listener hears every
     // boundary crossed anywhere in the page rather than the pointer leaving.
     const onPointerLeave = () => {
+      // Hand the window back first. The frame hook bails on `havePointer`, so
+      // once it is dropped nothing else would tell the main process the cursor
+      // has gone, and a window left interactive goes on hit-testing over the
+      // desktop for as long as the user is away.
+      if (!focus.gestureActive) applyPassthrough(true);
       focus.havePointer = false;
       focus.overCharacter = false;
       applyCursor();
@@ -395,7 +421,7 @@ function PointerFocusController({
       // Leave the window interactive so a later mount is never stuck ignoring.
       if (routesInput) bridge?.setMousePassthrough(false);
     };
-  }, [focus, gl, grabCursor, passthrough, scene]);
+  }, [focus, gl, grabCursor, passthrough, scene, trackPosition]);
 
   return null;
 }
@@ -405,10 +431,6 @@ export function Scene(props: SceneProps) {
   // Shared with the render loop by reference: pointer events and frames both
   // arrive far more often than the scene should re-render.
   const [pointerFocus] = useState(createPointerFocusState);
-  const gazeSettings = useMemo(
-    () => gazeSettingsFor(props.cursorGaze),
-    [props.cursorGaze],
-  );
   const [avatarScene, setAvatarScene] = useState<THREE.Object3D | null>(null);
   const [grounding, setGrounding] = useState<Grounding | null>(null);
   const handleAvatarReady = useCallback((scene: THREE.Object3D) => {
@@ -468,7 +490,6 @@ export function Scene(props: SceneProps) {
       />
       <Avatar
         {...props}
-        gazeSettings={gazeSettings}
         onReady={handleAvatarReady}
         pointerFocus={props.lookAtCursor ? pointerFocus : undefined}
       />
@@ -478,6 +499,7 @@ export function Scene(props: SceneProps) {
           focus={pointerFocus}
           grabCursor={props.grabCursor ?? false}
           passthrough={props.silhouetteHitTest ?? false}
+          trackPosition={props.lookAtCursor ?? false}
         />
       )}
       {props.groundShadow && grounding && (

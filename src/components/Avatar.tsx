@@ -31,13 +31,13 @@ import {
   createExcitementState,
   createGazeState,
   createGlanceState,
+  DEFAULT_GAZE,
   GAZE_BONE_WEIGHTS,
   gazeWeightsFor,
   isGazeAtRest,
   reachScaleFor,
   rigTurnFor,
   type ExcitementState,
-  type GazeSettings,
   type GazeState,
   type GazeTarget,
   type GlanceState,
@@ -167,7 +167,6 @@ interface AvatarProps {
   onReady?: (scene: THREE.Object3D) => void;
   /** Absent when the character should not watch the cursor. */
   pointerFocus?: PointerFocusState | undefined;
-  gazeSettings: GazeSettings;
 }
 
 function AvatarModel({
@@ -192,7 +191,6 @@ function AvatarModel({
   speakingTransition,
   onReady,
   pointerFocus,
-  gazeSettings,
 }: AvatarProps) {
   const vrm = useVrmLoader(modelUrl);
   const { play, update: updateAnimation } = useVrmAnimation(
@@ -412,7 +410,7 @@ function AvatarModel({
             ? { x: pointerFocus.canvasX, y: pointerFocus.canvasY }
             : null,
           delta,
-          gazeSettings,
+          DEFAULT_GAZE,
         );
 
         let target: GazeTarget | null = null;
@@ -428,7 +426,7 @@ function AvatarModel({
           // character's own depth: a point level with the head is one the head
           // can only face by turning a right angle, and a cursor resting on
           // the face would be a direction of no length at all. Out here, a
-          // cursor on the face asks her to look straight down the lens.
+          // cursor on the face asks for a look straight down the lens.
           const distance = camera.position.distanceTo(HEAD_WORLD);
           const perPixel = worldPerPixel(
             distance,
@@ -437,8 +435,8 @@ function AvatarModel({
           );
           const reach =
             perPixel *
-            gazeSettings.screenGain *
-            reachScaleFor(excitement, gazeSettings);
+            DEFAULT_GAZE.screenGain *
+            reachScaleFor(excitement, DEFAULT_GAZE);
           // Off the camera basis, so the cursor keeps meaning the same place
           // on screen however far the user has orbited.
           CAMERA_RIGHT.setFromMatrixColumn(camera.matrixWorld, 0);
@@ -471,7 +469,7 @@ function AvatarModel({
         } else {
           CURSOR_WORLD.copy(HEAD_WORLD).add(HEAD_FORWARD);
         }
-        advanceGaze(gaze, target, delta, gazeSettings);
+        advanceGaze(gaze, target, delta, DEFAULT_GAZE);
 
         // The eyes go the rest of the way, re-aimed at a point blended back
         // toward straight ahead by attention. Aiming them at the cursor
@@ -489,7 +487,7 @@ function AvatarModel({
           glanceRef.current,
           gaze.attention,
           delta,
-          gazeSettings,
+          DEFAULT_GAZE,
         );
 
         // Recorded in three-vrm's own angles rather than the rig's, since that
